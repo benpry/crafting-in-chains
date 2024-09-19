@@ -1,0 +1,13 @@
+[General]
+recruiter = prolific
+title = Learning experiment! (bonus payments)
+description = In this experiment, you will explore a virtual environment and share what you discover with other participants
+show_reward = false
+show_footer = false
+currency = $
+
+[Prolific]
+initial_recruitment_size = 1
+wage_per_hour = 10
+prolific_estimated_completion_minutes=12
+auto_recruit = false

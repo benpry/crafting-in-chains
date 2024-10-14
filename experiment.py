@@ -3,7 +3,6 @@ import re
 from flask import request
 import psynet.experiment
 from psynet.bot import Bot
-from psynet.consent import NoConsent
 from psynet.modular_page import ModularPage, Prompt, TextControl, Control
 from psynet.utils import NoArgumentProvided
 from psynet.page import InfoPage, SuccessfulEndPage
@@ -137,10 +136,13 @@ class CraftingGameTrial(ImitationChainTrial):
 class MessagePassingNode(ImitationChainNode):
 
     def create_initial_seed(self, experiment, participant):
-        return {"messages": []}
+        return {"messages": [], "inventories": []}
 
     def summarize_trials(self, trials: list, experiment, participant):
-        return {"messages": [trial.answer for trial in trials]}
+        return {
+            "messages": [trial.answer for trial in trials],
+            "inventories": [trial.var.inventory for trial in trials],
+        }
 
 
 class CraftingGameTrialMaker(ImitationChainTrialMaker):
@@ -150,6 +152,7 @@ class CraftingGameTrialMaker(ImitationChainTrialMaker):
 
 class Exp(psynet.experiment.Experiment):
     label = "Chain demo"
+    n_steps = 20
 
     timeline = Timeline(
         consent,
@@ -160,17 +163,17 @@ class Exp(psynet.experiment.Experiment):
             trial_class=CraftingGameTrial,
             node_class=MessagePassingNode,
             chain_type="across",
-            max_nodes_per_chain=10,
+            max_nodes_per_chain=5,
             max_trials_per_participant=1,
             expected_trials_per_participant=1,
             chains_per_participant=1,
-            chains_per_experiment=1,
+            chains_per_experiment=5,
             trials_per_node=1,
             balance_across_chains=True,
             check_performance_at_end=False,
             check_performance_every_trial=False,
             recruit_mode="n_participants",
-            target_n_participants=10,
+            target_n_participants=15,
         ),
         post_experiment_survey,
         SuccessfulEndPage(),
@@ -190,7 +193,13 @@ class Exp(psynet.experiment.Experiment):
         participant = Participant.query.filter_by(unique_id=unique_id).one()
         trial = participant.current_trial
         if not trial.var.has("inventory"):
-            trial.var.inventory = starting_elements
+            # if we initialize with the last participant's inventory, then
+            if trial.definition["inventories"] == []:
+                trial.var.inventory = starting_elements
+            else:
+                # get the final inventory of the last participant
+                trial.var.inventory = trial.definition["inventories"][-1]
+
         db.session.commit()
 
         return {"elements": trial.var.inventory}
@@ -248,7 +257,7 @@ class Exp(psynet.experiment.Experiment):
         participant = Participant.query.filter_by(unique_id=unique_id).one()
         trial = participant.current_trial
         if not trial.var.has("n_steps"):
-            trial.var.n_steps = 30
+            trial.var.n_steps = cls.n_steps
         db.session.commit()
 
         return {"n_steps": trial.var.n_steps}

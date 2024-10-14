@@ -36,6 +36,38 @@
   };
 </script>
 {% endmacro %} {% macro crafting_game(params) %}
+<style>
+  .grid-container {
+    display: grid;
+    grid-template-columns: 20% 60% 20%;
+    width: 90vw;
+  }
+  .grid-left {
+    grid-column: 1;
+  }
+
+  .grid-middle {
+    grid-column: 2;
+  }
+
+  .grid-right {
+    grid-column: 3;
+  }
+
+  #main-body {
+    width: fit-content;
+    max-width: none;
+  }
+
+  #prompt-text {
+    text-align: center;
+  }
+
+  #next-button {
+    margin-top: 10px;
+    margin-left: calc(50% - 20px);
+  }
+</style>
 <head>
   <meta charset="UTF-8" />
   <link rel="icon" type="image/svg+xml" href="static/vite.svg" />
@@ -45,6 +77,18 @@
   <link rel="stylesheet" crossorigin href="/static/index-CWqWs92H.css" />
 </head>
 <body>
-  <div id="root"></div>
+  <div class="grid-container">
+    <div id="received-message" class="grid-left">
+      <h1><strong>Message</strong></h1>
+      <div>Here's a message you received</div>
+    </div>
+    <div id="root" class="grid-middle"></div>
+    <div id="scratchpad" class="grid-right">
+      <h1><strong>Scratchpad</strong></h1>
+      <form>
+        <textarea rows="20" style="width: 100%">Take notes here</textarea>
+      </form>
+    </div>
+  </div>
 </body>
 {% endmacro %}

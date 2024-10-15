@@ -151,8 +151,8 @@ class CraftingGameTrialMaker(ImitationChainTrialMaker):
 
 
 class Exp(psynet.experiment.Experiment):
-    label = "Chain demo"
-    n_steps = 20
+    label = "Crafting in chains"
+    n_steps = 30
 
     timeline = Timeline(
         consent,

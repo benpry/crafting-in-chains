@@ -15,16 +15,18 @@ with page1:
     )
 
     div(
-        img(src="static/instruction-screenshots/overview.png", alt=""),
+        img(src="static/instruction-screenshots/overview-game.png", alt=""),
         style="text-align: center;",
     )
 
     p(
         """
-        In the game, you have an inventory of items that you can combine together
-        to discover new items. You will start with a few basic items and will
-        discover more items as you play. You can think of combining items as putting them together, using one item
-        on the other, or using one in the context of the other.
+        You have an inventory of items that you can combine together
+        to discover new items. You will start with a few basic items and will discover more
+        items as you play. The starting items have grey backgrounds, while the items you
+        discover have white backgrounds. You can think of combining items as putting
+        them together, using one item on the other, or using one in the context of the
+        other.
         """
     )
 
@@ -36,25 +38,33 @@ with page1:
     )
 
     div(
-        img(src="static/instruction-screenshots/crafting-step1.png", alt=""),
+        img(
+            src="static/instruction-screenshots/crafting-step1.png",
+            alt="",
+            style="max-width: 40ch;",
+        ),
         style="text-align: center;",
     )
 
     p(
         """
-        ...then drag the second item onto it. Those items will then be combined
-        into a new item.
+        ...then drag the second item on top of it.
         """
     )
 
     div(
-        img(src="static/instruction-screenshots/crafting-step2.png", alt=""),
+        img(
+            src="static/instruction-screenshots/crafting-step2.png",
+            alt="",
+            style="max-width: 30ch;",
+        ),
         style="text-align: center;",
     )
 
     p(
         """
-        If two items do not combine together, they will create junk. Junk has no value and cannot be combined with other items.
+        If the two items combine to make a new item, that item will be added to
+        your inventory. If the items do not combine, they will shake left and right.
         """
     )
 
@@ -105,15 +115,33 @@ with page2:
 
     p(
         """
-        After you have finished the game, you will write a message to help the
-        next participant.
+        This message will continue to be visible on the left side of the game interface
+        while you play.
         """
     )
 
     p(
         """
+        After you have finished the game, you will write a message to help the
+        next participant. That participant will read your message and see all the items
+        you discovered.
+        """
+    )
+
+    p(
+        """
+        While you play the game, you will be able to take notes using a scratchpad on the
+        right side of the screen. These notes will still be visible while you are writing your
+        message.
+        """
+    )
+
+    img(src="static/instruction-screenshots/overview-full.png", alt="")
+
+    p(
+        """
         You will earn another bonus based on how well the participant who reads
-        your message does in the game, so make sure to write helpful messages!
+        your message performs in the game, so make sure to write helpful messages!
         """
     )
 

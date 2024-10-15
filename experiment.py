@@ -19,7 +19,7 @@ from markupsafe import Markup
 from dallinger import db
 from dallinger.experiment import experiment_route
 from typing import Optional
-from .constants import starting_elements, crafting_table, junk
+from .constants import starting_elements, crafting_table
 from .consent import consent
 from .instructions import Instructions
 from .survey import post_experiment_survey
@@ -218,9 +218,10 @@ class Exp(psynet.experiment.Experiment):
         item1, item2 = request.values["item1"], request.values["item2"]
         pair = frozenset((item1, item2))
         if pair not in crafting_table:
-            result = junk
+            result = None
         else:
             result = crafting_table[pair]
+            result["discovered"] = True
 
         # log the craft in the trial
         participant = Participant.query.filter_by(unique_id=unique_id.group(0)).one()
@@ -231,11 +232,13 @@ class Exp(psynet.experiment.Experiment):
             {
                 "item1": item1,
                 "item2": item2,
-                "result": result["text"],
-                "value": result["value"],
+                "result": None if result is None else result["text"],
+                "value": None if result is None else result["value"],
             },
         )
-        if result["text"] not in [element["text"] for element in trial.var.inventory]:
+        if result is not None and result["text"] not in [
+            element["text"] for element in trial.var.inventory
+        ]:
             trial.var.inventory = trial.var.inventory + (result,)
         trial.var.n_steps = trial.var.n_steps - 1
         db.session.commit()

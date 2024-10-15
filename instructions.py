@@ -1,4 +1,4 @@
-from dominate.tags import div, p, h1, strong, em, a, strong, img
+from dominate.tags import div, p, h1, strong, em, a, strong, img, link
 
 from psynet.page import InfoPage
 from psynet.timeline import Module, join
@@ -6,6 +6,7 @@ from psynet.timeline import Module, join
 page1 = div()
 
 with page1:
+    link(rel="stylesheet", href="/static/instructions-style.css")
     p(
         """
         In this experiment, you will play a game where you craft items together
@@ -93,6 +94,7 @@ with page1:
 page2 = div()
 
 with page2:
+    link(rel="stylesheet", href="/static/instructions-style.css")
     p(
         """
         Luckily, you don't have to discover everything yourself! Before you play

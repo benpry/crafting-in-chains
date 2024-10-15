@@ -1,0 +1,12 @@
+#prompt-text {
+    max-width: 60ch;
+    font-size: 1.2em;
+}
+
+#prompt-text img {
+    max-width: 100%;
+}
+
+#main-body {
+    width: fit-content;
+}

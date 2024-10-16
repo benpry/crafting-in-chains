@@ -1,4 +1,4 @@
-from dominate.tags import div, p, h1, strong, em, a, strong, img, link
+from dominate.tags import div, p, h1, strong, em, a, strong, img, link, style
 
 from psynet.page import InfoPage
 from psynet.timeline import Module, join
@@ -6,7 +6,8 @@ from psynet.timeline import Module, join
 page1 = div()
 
 with page1:
-    link(rel="stylesheet", href="/static/instructions-style.css")
+    link(rel="stylesheet", href="/static/text-style.css")
+    link(rel="stylesheet", href="/static/big-font.css")
     p(
         """
         In this experiment, you will play a game where you craft items together
@@ -26,13 +27,21 @@ with page1:
         items as you play. The starting items have grey backgrounds, while the items you
         discover have white backgrounds. You can think of combining items as putting
         them together, using one item on the other, or using one in the context of the
-        other.
+        other. You can combine
+        """,
+        strong("two different items"),
         """
+        or
+        """,
+        strong("combine an item with itself"),
+        """
+        .
+        """,
     )
 
     p(
         """
-        To craft two items together, first drag one item from your inventory to
+        To craft items together, first drag one item from your inventory to
         the crafting area in the center of the board...
         """,
     )
@@ -104,7 +113,8 @@ with page1:
 page2 = div()
 
 with page2:
-    link(rel="stylesheet", href="/static/instructions-style.css")
+    link(rel="stylesheet", href="/static/text-style.css")
+    link(rel="stylesheet", href="/static/big-font.css")
     p(
         """
         Luckily, you don't have to discover everything yourself! Before you play

@@ -25,9 +25,8 @@ with consent_form:
         You are invited to participate in a research
         study on human reasoning. We will ask you to answer a series of questions in
         order to learn how people reason. You will be asked to think about problems
-        and answer by pressing buttons or writing text, and possibly explaining your
-        reasoning into a microphone. Participation in this research is voluntary, and
-        you are free to withdraw your consent at any time.
+        and answer by pressing buttons or writing text. Participation in this research
+        is voluntary, and you are free to withdraw your consent at any time.
         """,
     )
     p(

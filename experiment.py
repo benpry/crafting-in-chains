@@ -14,6 +14,7 @@ from psynet.trial.imitation_chain import (
     ImitationChainTrial,
     ImitationChainTrialMaker,
 )
+from psynet.trial.main import Trial as DBTrial
 from psynet.utils import get_logger
 from markupsafe import Markup
 from dallinger import db
@@ -25,6 +26,33 @@ from .instructions import Instructions
 from .survey import post_experiment_survey
 
 logger = get_logger()
+
+
+class ScratchpadPrompt(Prompt):
+    macro = "scratchpad_prompt"
+    external_template = "custom_macros.html"
+
+    def __init__(
+        self,
+        prompt_text,
+        trial_id,
+        text_align: str = "left",
+        buttons: Optional[list] = None,
+    ):
+        super().__init__(
+            text=prompt_text,
+            text_align=text_align,
+            buttons=buttons,
+        )
+        self.trial_id = trial_id
+
+    def get_scratchpad_text(self):
+        trial = DBTrial.query.filter_by(id=self.trial_id).one()
+        text = ""
+        for m in trial.var.scratchpad.split("\n"):
+            text += f"<p>{m}</p>"
+
+        return text
 
 
 class PrepopulatedTextControl(TextControl):
@@ -56,7 +84,7 @@ class WriteMessagePage(ModularPage):
     def __init__(
         self,
         label: str,
-        prompt: str,
+        trial_id,
         time_estimate: float,
         bot_response,
         initial_value: str = "",
@@ -64,14 +92,17 @@ class WriteMessagePage(ModularPage):
 
         super().__init__(
             label,
-            Prompt(prompt),
+            ScratchpadPrompt(
+                "Please write a message to help the next participant. Your scratchpad text is below.",
+                trial_id,
+            ),
             control=PrepopulatedTextControl(
                 initial_value=initial_value,
                 block_copy_paste=False,
                 bot_response=bot_response,
                 one_line=False,
                 width="60ch",
-                height="10ch",
+                height="20ch",
             ),
             time_estimate=time_estimate,
         )
@@ -91,6 +122,20 @@ class CraftingGameControl(Control):
     macro = "crafting_game"
     external_template = "custom_macros.html"
 
+    def __init__(self, message: str):
+        super().__init__()
+        # format the message as HTML
+        if message == "":
+            self.message = "<p>There is no message for you to read.</p>"
+        else:
+            self.message = ""
+            for m in message.split("\n"):
+                self.message += f"<p>{m}</p>"
+
+    def format_answer(self, raw_answer, **kwargs):
+        print(f"formatting answer: {raw_answer}")
+        return raw_answer
+
 
 class CraftingGameTrial(ImitationChainTrial):
     time_estimate = 20 + 300 + 60
@@ -100,7 +145,9 @@ class CraftingGameTrial(ImitationChainTrial):
 
     def show_trial(self, experiment, participant):
 
+        empty_message = False
         if len(self.definition["messages"]) == 0:
+            empty_message = True
             message = "<p>You are the first participant, so there is no message for you to read.</p>"
         else:
             message = "<p>The previous participant sent you this message:</p>"
@@ -110,16 +157,17 @@ class CraftingGameTrial(ImitationChainTrial):
         read_message_page = InfoPage(
             Markup(message),
             time_estimate=20,
+            css_links=["/static/text-style.css"],
         )
         game_page = ModularPage(
             "game",
             Prompt("Please play the game below. Press 'Next' when you are done."),
-            control=CraftingGameControl(),
+            control=CraftingGameControl(message="" if empty_message else message),
             time_estimate=300,
         )
         write_message_page = WriteMessagePage(
             "message",
-            "Please send a message to help the next participant.",
+            self.id,
             time_estimate=60,
             bot_response=lambda: self.definition["messages"][-1]
             + "\nBeep boop, I am a bot.",
@@ -264,3 +312,34 @@ class Exp(psynet.experiment.Experiment):
         db.session.commit()
 
         return {"n_steps": trial.var.n_steps}
+
+    @experiment_route("/api/set-scratchpad", methods=["POST"])
+    @classmethod
+    def set_scratchpad(cls):
+
+        # get the trial
+        unique_id = re.search(
+            r"(?<=\?unique_id=)([A-Z]|\d|:)+", request.values["urlParams"]
+        ).group(0)
+        participant = Participant.query.filter_by(unique_id=unique_id).one()
+        trial = participant.current_trial
+        trial.var.scratchpad = request.values["scratchpad"]
+        db.session.commit()
+
+        return {"scratchpad": trial.var.scratchpad}
+
+    @experiment_route("/api/get-scratchpad", methods=["GET"])
+    @classmethod
+    def get_scratchpad(cls):
+
+        # get the trial
+        unique_id = re.search(
+            r"(?<=\?unique_id=)([A-Z]|\d|:)+", request.values["urlParams"]
+        ).group(0)
+        participant = Participant.query.filter_by(unique_id=unique_id).one()
+        trial = participant.current_trial
+        if not trial.var.has("scratchpad"):
+            trial.var.scratchpad = ""
+            db.session.commit()
+
+        return {"scratchpad": trial.var.scratchpad}

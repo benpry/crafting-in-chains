@@ -1,4 +1,26 @@
-{% macro prepopulated_text(params) %}
+{% macro scratchpad_prompt(params) %}
+<style>
+   #prompt-text {
+       text-align: {{ params.text_align }};
+   }
+   #scratchpad-text p {
+     margin-bottom: 0.25rem;
+   }
+   #full-text {
+     max-width: 60ch;
+   }
+  #main-body {
+     width: fit-content;
+     max-width: none;
+  }
+</style>
+
+{% if params.text is not none %}
+<div id="full-text">
+  <div id="prompt-text">{{ params.text_html }}</div>
+  <div id="scratchpad-text">{{ params.get_scratchpad_text() }}</div>
+</div>
+{% endif %} {% endmacro %} {% macro prepopulated_text(params) %}
 <style>
   #text-input-container {
       padding-top: 20px;
@@ -35,7 +57,7 @@
     };
   };
 </script>
-{% endmacro %} {% macro crafting_game(params) %}
+{% endmacro %} {% macro crafting_game(config) %}
 <style>
   .grid-container {
     display: grid;
@@ -67,6 +89,16 @@
     margin-top: 10px;
     margin-left: calc(50% - 20px);
   }
+
+  #scratchpad-div {
+    width: 100%;
+  }
+
+  #scratchpad {
+    width: 100%;
+    height: calc(100% - 20px);
+    border: 1px solid grey;
+  }
 </style>
 <head>
   <meta charset="UTF-8" />
@@ -80,15 +112,38 @@
   <div class="grid-container">
     <div id="received-message" class="grid-left">
       <h1><strong>Message</strong></h1>
-      <div>Here's a message you received</div>
+      <div>{{ config.message }}</div>
     </div>
     <div id="root" class="grid-middle"></div>
-    <div id="scratchpad" class="grid-right">
+    <div id="scratchpad-div" class="grid-right">
       <h1><strong>Scratchpad</strong></h1>
       <form>
-        <textarea rows="20" style="width: 100%">Take notes here</textarea>
+        <textarea id="scratchpad" type="text"></textarea>
       </form>
     </div>
   </div>
+  <script>
+    const scratchpad = document.getElementById("scratchpad");
+    // call the server when the scratchpad changes
+    scratchpadChanged = function () {
+      dallinger.post("/api/set-scratchpad", {
+        scratchpad: scratchpad.value,
+        urlParams: window.location.search,
+      });
+    };
+    scratchpad.addEventListener("input", scratchpadChanged);
+
+    // on load, set the scratchpad to the value stored in the database
+    window.addEventListener("load", function () {
+      dallinger
+        .get("/api/get-scratchpad", {
+          urlParams: window.location.search,
+        })
+        .then((response) => {
+          scratchpad.value = response.scratchpad;
+        });
+    });
+  </script>
 </body>
+
 {% endmacro %}

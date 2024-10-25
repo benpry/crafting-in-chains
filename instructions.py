@@ -191,8 +191,7 @@ with individual_page:
     p(
         """
         While you play the game, you will be able to take notes using a scratchpad on the
-        right side of the screen. These notes will still be visible while you are writing your
-        message.
+        right side of the screen.
         """
     )
 

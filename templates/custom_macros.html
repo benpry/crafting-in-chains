@@ -111,8 +111,10 @@
 <body>
   <div class="grid-container">
     <div id="received-message" class="grid-left">
+      {% if config.message %}
       <h1><strong>Message</strong></h1>
       <div>{{ config.message }}</div>
+      {% endif %}
     </div>
     <div id="root" class="grid-middle"></div>
     <div id="scratchpad-div" class="grid-right">

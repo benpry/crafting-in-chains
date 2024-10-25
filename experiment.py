@@ -1,4 +1,5 @@
 import re
+import random
 
 from flask import request
 import psynet.experiment
@@ -7,14 +8,15 @@ from psynet.modular_page import ModularPage, Prompt, TextControl, Control
 from psynet.utils import NoArgumentProvided
 from psynet.page import InfoPage, SuccessfulEndPage
 from psynet.participant import Participant
-from psynet.timeline import FailedValidation, Timeline
+from psynet.timeline import FailedValidation, Timeline, CodeBlock, conditional
 from psynet.trial.imitation_chain import (
     ImitationChainNetwork,
     ImitationChainNode,
     ImitationChainTrial,
     ImitationChainTrialMaker,
 )
-from psynet.trial.main import Trial as DBTrial
+from psynet.trial.main import Trial
+from psynet.trial.static import StaticTrial, StaticTrialMaker, StaticNode
 from psynet.utils import get_logger
 from markupsafe import Markup
 from dallinger import db
@@ -47,7 +49,7 @@ class ScratchpadPrompt(Prompt):
         self.trial_id = trial_id
 
     def get_scratchpad_text(self):
-        trial = DBTrial.query.filter_by(id=self.trial_id).one()
+        trial = Trial.query.filter_by(id=self.trial_id).one()
         text = ""
         for m in trial.var.scratchpad.split("\n"):
             text += f"<p>{m}</p>"
@@ -122,9 +124,11 @@ class CraftingGameControl(Control):
     macro = "crafting_game"
     external_template = "custom_macros.html"
 
-    def __init__(self, message: str):
+    def __init__(self, message: Optional[str]):
         super().__init__()
         # format the message as HTML
+        if message is None:
+            return
         if message == "":
             self.message = "<p>There is no message for you to read.</p>"
         else:
@@ -137,11 +141,11 @@ class CraftingGameControl(Control):
         return raw_answer
 
 
-class CraftingGameTrial(ImitationChainTrial):
+class CraftingGameChainTrial(ImitationChainTrial):
     time_estimate = 20 + 300 + 60
 
     def make_definition(self, experiment, participant):
-        return self.node.definition
+        return {**self.node.definition, "starting_n_actions": 30}
 
     def show_trial(self, experiment, participant):
 
@@ -181,6 +185,23 @@ class CraftingGameTrial(ImitationChainTrial):
         return [read_message_page, game_page, write_message_page]
 
 
+class CraftingGameIndividualTrial(StaticTrial):
+    time_estimate = 20 + 600 + 60
+
+    def make_definition(self, experiment, participant):
+        return {"inventories": [], "starting_n_actions": 150}
+
+    def show_trial(self, experiment, participant):
+
+        game_page = ModularPage(
+            "game",
+            Prompt("Please play the game below. Press 'Next' when you are done."),
+            control=CraftingGameControl(message=None),
+            time_estimate=600,
+        )
+        return [game_page]
+
+
 class MessagePassingNode(ImitationChainNode):
 
     def create_initial_seed(self, experiment, participant):
@@ -193,35 +214,75 @@ class MessagePassingNode(ImitationChainNode):
         }
 
 
-class CraftingGameTrialMaker(ImitationChainTrialMaker):
+class CraftingGameChainTrialMaker(ImitationChainTrialMaker):
     response_timeout_sec = 600
     check_timeout_interval_sec = 450
 
 
+class CraftingGameIndividualNode(StaticNode):
+
+    def create_initial_seed(self, experiment, participant):
+        return {"inventories": []}
+
+
+class CraftingGameIndividualTrialMaker(StaticTrialMaker):
+    response_timeout_sec = 600
+    check_timeout_interval_sec = 450
+    choose_participant_group = None
+
+
+def assign_to_condition(participant, experiment):
+    """
+    Assign the participant to either chain or immortal individual condition
+    """
+    # participant.var.condition = random.choice(["chain", "individual"])
+    participant.var.condition = "individual"
+
+
 class Exp(psynet.experiment.Experiment):
     label = "Crafting in chains"
-    n_steps = 30
 
     timeline = Timeline(
         consent,
+        CodeBlock(assign_to_condition),
         Instructions(),
-        CraftingGameTrialMaker(
-            id_="chain_task",
-            network_class=ImitationChainNetwork,
-            trial_class=CraftingGameTrial,
-            node_class=MessagePassingNode,
-            chain_type="across",
-            max_nodes_per_chain=5,
-            max_trials_per_participant=1,
-            expected_trials_per_participant=1,
-            chains_per_participant=1,
-            chains_per_experiment=5,
-            trials_per_node=1,
-            balance_across_chains=True,
-            check_performance_at_end=False,
-            check_performance_every_trial=False,
-            recruit_mode="n_participants",
-            target_n_participants=15,
+        conditional(
+            "chain_or_individual",
+            condition=lambda participant, experiment: participant.var.condition
+            == "chain",
+            logic_if_true=CraftingGameChainTrialMaker(
+                id_="chain_task",
+                network_class=ImitationChainNetwork,
+                trial_class=CraftingGameChainTrial,
+                node_class=MessagePassingNode,
+                chain_type="across",
+                max_nodes_per_chain=5,
+                max_trials_per_participant=1,
+                expected_trials_per_participant=1,
+                chains_per_participant=1,
+                chains_per_experiment=5,
+                trials_per_node=1,
+                balance_across_chains=True,
+                check_performance_at_end=False,
+                check_performance_every_trial=False,
+                recruit_mode="n_participants",
+                target_n_participants=15,
+            ),
+            logic_if_false=CraftingGameIndividualTrialMaker(
+                id_="individual_task",
+                trial_class=CraftingGameIndividualTrial,
+                nodes=[CraftingGameIndividualNode()],
+                expected_trials_per_participant=1,
+                check_performance_at_end=False,
+                check_performance_every_trial=False,
+                fail_trials_on_premature_exit=False,
+                fail_trials_on_participant_performance_check=False,
+                recruit_mode="n_participants",
+                target_n_participants=5,
+                assets=None,
+                n_repeat_trials=0,
+            ),
+            fix_time_credit=False,
         ),
         post_experiment_survey,
         SuccessfulEndPage(),
@@ -240,12 +301,17 @@ class Exp(psynet.experiment.Experiment):
         ).group(0)
         participant = Participant.query.filter_by(unique_id=unique_id).one()
         trial = participant.current_trial
+        print(f"trial: {trial}")
+        print(f"definition: {trial.definition}")
         if not trial.var.has("inventory"):
             # if we initialize with the last participant's inventory, then
+            print("populating inventory...")
             if trial.definition["inventories"] == []:
+                print("inventories empty")
                 trial.var.inventory = starting_elements
             else:
                 # get the final inventory of the last participant
+                print("inventories not empty")
                 trial.var.inventory = trial.definition["inventories"][-1]
 
         db.session.commit()
@@ -308,7 +374,7 @@ class Exp(psynet.experiment.Experiment):
         participant = Participant.query.filter_by(unique_id=unique_id).one()
         trial = participant.current_trial
         if not trial.var.has("n_steps"):
-            trial.var.n_steps = cls.n_steps
+            trial.var.n_steps = trial.definition["starting_n_actions"]
         db.session.commit()
 
         return {"n_steps": trial.var.n_steps}

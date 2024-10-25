@@ -1,7 +1,7 @@
 from dominate.tags import div, p, h1, strong, em, a, strong, img, link, style
 
 from psynet.page import InfoPage
-from psynet.timeline import Module, join
+from psynet.timeline import Module, join, conditional
 
 page1 = div()
 
@@ -33,10 +33,7 @@ with page1:
         """
         or
         """,
-        strong("combine an item with itself"),
-        """
-        .
-        """,
+        strong("combine an item with itself."),
     )
 
     p(
@@ -77,6 +74,11 @@ with page1:
         """
     )
 
+page2 = div()
+
+with page2:
+    link(rel="stylesheet", href="/static/text-style.css")
+    link(rel="stylesheet", href="/static/big-font.css")
     p(
         """
         Every item you discover has a value. Some items have higher values than
@@ -100,6 +102,25 @@ with page1:
 
     p(
         """
+        If the crafting area ever gets too crowded, you can press the
+        """,
+        strong("garbage"),
+        """
+        button to clear all the items from it.
+        """,
+    )
+
+    div(
+        img(
+            src="static/instruction-screenshots/garbage-button.png",
+            alt="",
+            style="max-width: 30ch;",
+        ),
+        style="text-align: center;",
+    )
+
+    p(
+        """
         You will earn a
         """,
         strong("bonus"),
@@ -110,9 +131,9 @@ with page1:
     )
 
 
-page2 = div()
+chain_page = div()
 
-with page2:
+with chain_page:
     link(rel="stylesheet", href="/static/text-style.css")
     link(rel="stylesheet", href="/static/big-font.css")
     p(
@@ -162,12 +183,41 @@ with page2:
     )
 
 
+individual_page = div()
+
+with individual_page:
+    link(rel="stylesheet", href="/static/text-style.css")
+    link(rel="stylesheet", href="/static/big-font.css")
+    p(
+        """
+        While you play the game, you will be able to take notes using a scratchpad on the
+        right side of the screen. These notes will still be visible while you are writing your
+        message.
+        """
+    )
+
+    img(src="static/instruction-screenshots/overview-scratchpad.png", alt="")
+
+    p(
+        """
+        Press 'Next' when you are ready to continue.
+        """
+    )
+
+
 def Instructions():
     return Module(
         "instructions",
         join(
             InfoPage(page1, time_estimate=15),
             InfoPage(page2, time_estimate=5),
+            conditional(
+                "show_message_passing_page",
+                condition=lambda participant, experiment: participant.var.condition
+                == "chain",
+                logic_if_true=InfoPage(chain_page, time_estimate=5),
+                logic_if_false=InfoPage(individual_page, time_estimate=5),
+            ),
         ),
     )
 

@@ -213,6 +213,14 @@ class MessagePassingNode(ImitationChainNode):
             "inventories": [trial.var.inventory for trial in trials],
         }
 
+    @property
+    def ongoing_trials(self):
+        return [t for t in self.viable_trials if not t.complete and not t.finalized]
+
+    @property
+    def is_free(self):
+        return len(self.ongoing_trials) == 0
+
 
 class CraftingGameChainTrialMaker(ImitationChainTrialMaker):
     response_timeout_sec = 600
@@ -235,12 +243,42 @@ def assign_to_condition(participant, experiment):
     """
     Assign the participant to either chain or immortal individual condition
     """
-    # participant.var.condition = random.choice(["chain", "individual"])
-    participant.var.condition = "individual"
+    # get the number of free chains
+    print(f"assigning participant {participant.id} to condition...")
+    chains = ImitationChainNetwork.query.filter_by(full=False)
+    n_free_chains = len([chain for chain in chains if chain.head.is_free])
+    print(f"n_free_chains: {n_free_chains}")
+    if n_free_chains == 0:
+        participant.var.condition = "individual"
+        print(
+            f"No free chains. Assigning participant {participant.id} to individual condition"
+        )
+        return
+
+    # get the number of immortal individuals we still need
+    immortal_individuals_completed_or_active = (
+        CraftingGameIndividualTrial.query.filter_by(failed=False).count()
+    )
+    immortal_individuals_needed = max(
+        experiment.n_immortal_individuals - immortal_individuals_completed_or_active, 0
+    )
+    print(f"immortal_individuals_needed: {immortal_individuals_needed}")
+    total_needed = n_free_chains + immortal_individuals_needed
+    p_chain = n_free_chains / total_needed
+    p_individual = 1 - p_chain
+    print(f"p_chain: {p_chain}, p_individual: {p_individual}")
+    assignment = random.choices(
+        ["chain", "individual"], weights=[p_chain, p_individual]
+    )
+    print(f"assigning to {assignment}")
+    participant.var.condition = assignment[0]
 
 
 class Exp(psynet.experiment.Experiment):
     label = "Crafting in chains"
+    n_chains = 5
+    chain_length = 3
+    n_immortal_individuals = 5
 
     timeline = Timeline(
         consent,
@@ -257,17 +295,17 @@ class Exp(psynet.experiment.Experiment):
                     trial_class=CraftingGameChainTrial,
                     node_class=MessagePassingNode,
                     chain_type="across",
-                    max_nodes_per_chain=5,
+                    max_nodes_per_chain=chain_length,
                     max_trials_per_participant=1,
                     expected_trials_per_participant=1,
                     chains_per_participant=1,
-                    chains_per_experiment=5,
+                    chains_per_experiment=n_chains,
                     trials_per_node=1,
                     balance_across_chains=True,
                     check_performance_at_end=False,
                     check_performance_every_trial=False,
                     recruit_mode="n_participants",
-                    target_n_participants=15,
+                    target_n_participants=n_chains * chain_length,
                 ),
                 chain_survey,
             ),
@@ -282,7 +320,7 @@ class Exp(psynet.experiment.Experiment):
                     fail_trials_on_premature_exit=False,
                     fail_trials_on_participant_performance_check=False,
                     recruit_mode="n_participants",
-                    target_n_participants=5,
+                    target_n_participants=n_immortal_individuals,
                     assets=None,
                     n_repeat_trials=0,
                 ),

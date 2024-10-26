@@ -1,16 +1,23 @@
 [General]
-recruiter = hotair
-title = Learning experiment! (bonus payments)
-description = In this experiment, you will explore a virtual environment and share what you discover with other participants
+recruiter = generic
+title = Learning experiment! (bonus payments, Chrome only)
+description = In this experiment, you will explore a virtual environment. You will earn a bonus that depends on how much you discover.
 show_reward = false
 show_footer = false
 currency = $
 
 [Prolific]
-initial_recruitment_size = 5
-wage_per_hour = 10
-prolific_estimated_completion_minutes=12
 auto_recruit = false
+initial_recruitment_size = 5
+wage_per_hour = 0
+base_payment = 2
+prolific_estimated_completion_minutes = 10
+
+# Set prescreeners manually:
+# - Approval rate >95%
+# - Fluent in English
+# - Based in the US
+# - Didn't participate in previous crafting tasks
 
 [Docker]
 docker_image_base_name = docker.io/benpry/crafting-in-chains

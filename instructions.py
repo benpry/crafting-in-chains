@@ -1,5 +1,4 @@
-from dominate.tags import div, p, h1, strong, em, a, strong, img, link, style
-
+from dominate.tags import div, p, strong, img, link, span
 from psynet.page import InfoPage
 from psynet.timeline import Module, join, conditional
 
@@ -22,12 +21,11 @@ with page1:
 
     p(
         """
-        You have an inventory of items that you can combine together
-        to discover new items. You will start with a few basic items and will discover more
-        items as you play. The starting items have grey backgrounds, while the items you
-        discover have white backgrounds. You can think of combining items as putting
-        them together, using one item on the other, or using one in the context of the
-        other. You can combine
+        You have an inventory of items that you can combine together to discover new items.
+        You will start with a few basic items and will discover more items as you play.
+        You have infinite copies of the items in your inventory. You can think of combining
+        items as putting them together, using one item on the other, or using one in the context
+        of the other. You can combine
         """,
         strong("two different items"),
         """
@@ -81,12 +79,23 @@ with page2:
     link(rel="stylesheet", href="/static/big-font.css")
     p(
         """
-        Every item you discover has a value. Some items have higher values than
-        others. Items that take more steps to discover tend to be of higher value.
-        Your goal is to maximize the values of the items you combine. You only get
-        to craft a limited number of combinations, so you probably can't discover
-        everything.
+        Every item you discover has a value. Items are colored by their value:
+        basic
+        """,
+        span("(gray)", style="color: rgb(226 232 240);"),
         """
+        common (white),
+        uncommon
+        """,
+        span("(green)", style="color: rgb(134 239 172);"),
+        """
+        , rare
+        """,
+        span("(blue)", style="color: rgb(56 189 248);"),
+        """
+        , and legendary
+        """,
+        span("(purple)", style="color: rgb(167 139 250);"),
     )
 
     p(
@@ -125,7 +134,7 @@ with page2:
         """,
         strong("bonus"),
         """
-        that depends on the total value of the items you discover. The higher the
+        that depends on the total value of all the items you discover. The higher the
         total value, the higher your bonus will be.
         """,
     )
@@ -138,7 +147,7 @@ with chain_page:
     link(rel="stylesheet", href="/static/big-font.css")
     p(
         """
-        Luckily, you don't have to discover everything yourself! Before you play
+        Luckily, you don't have to discover everything by yourself! Before you play
         the game, you will read a message from a previous participant who played
         the same game as you.
         """
@@ -209,15 +218,13 @@ def Instructions():
         "instructions",
         join(
             InfoPage(page1, time_estimate=15),
-            InfoPage(page2, time_estimate=5),
+            InfoPage(page2, time_estimate=15),
             conditional(
                 "show_message_passing_page",
                 condition=lambda participant, experiment: participant.var.condition
                 == "chain",
-                logic_if_true=InfoPage(chain_page, time_estimate=5),
-                logic_if_false=InfoPage(individual_page, time_estimate=5),
+                logic_if_true=InfoPage(chain_page, time_estimate=15),
+                logic_if_false=InfoPage(individual_page, time_estimate=15),
             ),
         ),
     )
-
-    return InfoPage(html, time_estimate=15)

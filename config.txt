@@ -1,5 +1,5 @@
 [General]
-recruiter = generic
+recruiter = prolific
 title = Learning experiment! (bonus payments, Chrome only)
 description = In this experiment, you will explore a virtual environment. You will earn a bonus that depends on how much you discover.
 show_reward = false
@@ -8,7 +8,7 @@ currency = $
 
 [Prolific]
 auto_recruit = false
-initial_recruitment_size = 5
+initial_recruitment_size = 6
 wage_per_hour = 0
 base_payment = 2
 prolific_estimated_completion_minutes = 10

@@ -124,8 +124,10 @@ class CraftingGameControl(Control):
     macro = "crafting_game"
     external_template = "custom_macros.html"
 
-    def __init__(self, message: Optional[str]):
-        super().__init__()
+    def __init__(self, message: Optional[str], show_next_button: bool = False):
+        super().__init__(
+            show_next_button=show_next_button,
+        )
         # format the message as HTML
         if message is None:
             return
@@ -189,7 +191,7 @@ class CraftingGameIndividualTrial(StaticTrial):
     time_estimate = 20 + 600 + 60
 
     def make_definition(self, experiment, participant):
-        return {"inventories": [], "starting_n_actions": 150}
+        return {"inventories": [], "starting_n_actions": 90}
 
     def show_trial(self, experiment, participant):
 
@@ -208,9 +210,15 @@ class MessagePassingNode(ImitationChainNode):
         return {"messages": [], "inventories": []}
 
     def summarize_trials(self, trials: list, experiment, participant):
+        inventories = []
+        messages = []
+        for trial in trials:
+            if trial.var.has("inventory"):
+                inventories.append(trial.var.inventory)
+            messages.append(trial.answer)
         return {
-            "messages": [trial.answer for trial in trials],
-            "inventories": [trial.var.inventory for trial in trials],
+            "messages": messages,
+            "inventories": inventories,
         }
 
     @property
@@ -223,8 +231,8 @@ class MessagePassingNode(ImitationChainNode):
 
 
 class CraftingGameChainTrialMaker(ImitationChainTrialMaker):
-    response_timeout_sec = 600
-    check_timeout_interval_sec = 450
+    # There's a long tail of trial durations, so we'll set the timeout to 30 minutes
+    response_timeout_sec = 60 * 40
 
 
 class CraftingGameIndividualNode(StaticNode):
@@ -234,8 +242,8 @@ class CraftingGameIndividualNode(StaticNode):
 
 
 class CraftingGameIndividualTrialMaker(StaticTrialMaker):
-    response_timeout_sec = 600
-    check_timeout_interval_sec = 450
+    # There's a long tail of trial durations, so we'll set the timeout to 1 hour
+    response_timeout_sec = 60 * 60
     choose_participant_group = None
 
 
@@ -276,9 +284,9 @@ def assign_to_condition(participant, experiment):
 
 class Exp(psynet.experiment.Experiment):
     label = "Crafting in chains"
-    n_chains = 5
-    chain_length = 3
-    n_immortal_individuals = 5
+    n_chains = 3
+    chain_length = 2
+    n_immortal_individuals = 2
 
     timeline = Timeline(
         consent,
@@ -340,12 +348,10 @@ class Exp(psynet.experiment.Experiment):
 
         # get the trial
         unique_id = re.search(
-            r"(?<=\?unique_id=)([A-Z]|\d|:)+", request.values["urlParams"]
+            r"(?<=\?unique_id=)([A-Z]|[a-z]|\d|:)+", request.values["urlParams"]
         ).group(0)
         participant = Participant.query.filter_by(unique_id=unique_id).one()
         trial = participant.current_trial
-        print(f"trial: {trial}")
-        print(f"definition: {trial.definition}")
         if not trial.var.has("inventory"):
             # if we initialize with the last participant's inventory, then
             print("populating inventory...")
@@ -368,7 +374,7 @@ class Exp(psynet.experiment.Experiment):
         Return the result of crafting two items together
         """
         unique_id = re.search(
-            r"(?<=\?unique_id=)([A-Z]|\d|:)+", request.values["urlParams"]
+            r"(?<=\?unique_id=)([A-Z]|[a-z]|\d|:)+", request.values["urlParams"]
         )
 
         # get the items to combine and the result
@@ -393,11 +399,20 @@ class Exp(psynet.experiment.Experiment):
                 "value": None if result is None else result["value"],
             },
         )
+
+        # set the inventory if it hasn't already been set
+        if not trial.var.has("inventory"):
+            cls.get_start_items(cls)
         if result is not None and result["text"] not in [
             element["text"] for element in trial.var.inventory
         ]:
             trial.var.inventory = trial.var.inventory + (result,)
+
+        # decrement the number of steps
+        if not trial.var.has("n_steps"):
+            cls.get_n_steps(cls)
         trial.var.n_steps = trial.var.n_steps - 1
+
         db.session.commit()
 
         # return the created element
@@ -412,8 +427,9 @@ class Exp(psynet.experiment.Experiment):
 
         # get the trial
         unique_id = re.search(
-            r"(?<=\?unique_id=)([A-Z]|\d|:)+", request.values["urlParams"]
+            r"(?<=\?unique_id=)([A-Z]|[a-z]|\d|:)+", request.values["urlParams"]
         ).group(0)
+
         participant = Participant.query.filter_by(unique_id=unique_id).one()
         trial = participant.current_trial
         if not trial.var.has("n_steps"):
@@ -428,7 +444,7 @@ class Exp(psynet.experiment.Experiment):
 
         # get the trial
         unique_id = re.search(
-            r"(?<=\?unique_id=)([A-Z]|\d|:)+", request.values["urlParams"]
+            r"(?<=\?unique_id=)([A-Z]|[a-z]|\d|:)+", request.values["urlParams"]
         ).group(0)
         participant = Participant.query.filter_by(unique_id=unique_id).one()
         trial = participant.current_trial
@@ -443,7 +459,7 @@ class Exp(psynet.experiment.Experiment):
 
         # get the trial
         unique_id = re.search(
-            r"(?<=\?unique_id=)([A-Z]|\d|:)+", request.values["urlParams"]
+            r"(?<=\?unique_id=)([A-Z]|[a-z]|\d|:)+", request.values["urlParams"]
         ).group(0)
         participant = Participant.query.filter_by(unique_id=unique_id).one()
         trial = participant.current_trial

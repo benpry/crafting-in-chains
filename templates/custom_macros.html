@@ -2,6 +2,7 @@
 <style>
    #prompt-text {
        text-align: {{ params.text_align }};
+       font-weight: 500;
    }
    #scratchpad-text p {
      margin-bottom: 0.25rem;
@@ -16,10 +17,85 @@
 </style>
 
 {% if params.text is not none %}
-<div id="full-text">
-  <div id="prompt-text">{{ params.text_html }}</div>
-  <div id="scratchpad-text">{{ params.get_scratchpad_text() }}</div>
-</div>
+<head>
+  <link rel="stylesheet" crossorigin href="/static/index-CWqWs92H.css" />
+</head>
+<body>
+  <div id="full-text">
+    <div id="prompt-text">{{ params.text_html }}</div>
+    <div id="inventory-recap" class="flex flex-wrap gap-2 p-2"></div>
+    <div id="prompt-text">Your scratchpad had the following content:</div>
+    <div id="scratchpad-text">{{ params.get_scratchpad_text() }}</div>
+    <div id="prompt-text">
+      Please write a message that will help the next participant discover more
+      items.
+    </div>
+  </div>
+</body>
+
+<script>
+  const bgColorsByValue = {
+    0: "bg-slate-200",
+    1: "bg-white",
+    2: "bg-green-300",
+    3: "bg-sky-400",
+    4: "bg-violet-400",
+    5: "bg-amber-300",
+  };
+
+  const toColorsByValue = {
+    0: "to-slate-200",
+    1: "to-white",
+    2: "to-green-300",
+    3: "to-sky-400",
+    4: "to-violet-400",
+    5: "to-amber-300",
+  };
+
+  window.addEventListener("load", function () {
+    // get the inventory and populate the inventory-recap div
+    dallinger
+      .get("/api/start", {
+        urlParams: window.location.search,
+      })
+      .then((response) => {
+        console.log(response);
+        const inventory = response.elements;
+        console.log("populating with inventory:");
+        console.log(inventory);
+
+        const inventoryDiv = document.getElementById("inventory-recap");
+        for (const item of inventory) {
+          const itemDiv = document.createElement("div");
+          itemDiv.classList.add(
+            "flex",
+            "gap-2",
+            "p-2",
+            "border",
+            bgColorsByValue[item.value],
+            "border-slate-400",
+            "rounded-md",
+            "text-xl",
+            "h-fit",
+            "w-fit",
+          );
+          console.log(item);
+          console.log(item.text);
+
+          const itemImage = document.createElement("img");
+          itemImage.src = `/static/item-images/${item.image}.svg`;
+          itemImage.classList.add("h-6", "w-6");
+          itemDiv.appendChild(itemImage);
+
+          const itemText = document.createElement("div");
+          itemText.innerHTML = item.text;
+          itemDiv.appendChild(itemText);
+          inventoryDiv.appendChild(itemDiv);
+        }
+      });
+  });
+</script>
+
 {% endif %} {% endmacro %} {% macro prepopulated_text(params) %}
 <style>
   #text-input-container {

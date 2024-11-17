@@ -95,7 +95,7 @@ class WriteMessagePage(ModularPage):
         super().__init__(
             label,
             ScratchpadPrompt(
-                "Please write a message to help the next participant. Your scratchpad text is below.",
+                "The next participant will build upon the items you have discovered. They will start with the following items in their inventory:",
                 trial_id,
             ),
             control=PrepopulatedTextControl(
@@ -110,7 +110,10 @@ class WriteMessagePage(ModularPage):
         )
 
     def format_answer(self, raw_answer, **kwargs):
-        return raw_answer.strip()
+        if raw_answer is None:
+            return ""
+        else:
+            return raw_answer.strip()
 
     def validate(self, response, **kwargs):
         if response.answer == "":
@@ -284,9 +287,9 @@ def assign_to_condition(participant, experiment):
 
 class Exp(psynet.experiment.Experiment):
     label = "Crafting in chains"
-    n_chains = 3
-    chain_length = 2
-    n_immortal_individuals = 2
+    n_chains = 4
+    chain_length = 3
+    n_immortal_individuals = 6
 
     timeline = Timeline(
         consent,

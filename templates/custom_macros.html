@@ -168,11 +168,12 @@
 
   #scratchpad-div {
     width: 100%;
+    height: 605px;
   }
 
   #scratchpad {
     width: 100%;
-    height: calc(100% - 20px);
+    height: 100%;
     border: 1px solid grey;
   }
 </style>
@@ -181,8 +182,9 @@
   <link rel="icon" type="image/svg+xml" href="static/vite.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <script type="module" crossorigin src="/static/dallinger2.js"></script>
-  <script type="module" crossorigin src="/static/index-SmXfa2e9.js"></script>
-  <link rel="stylesheet" crossorigin href="/static/index-CWqWs92H.css" />
+  <script type="module" crossorigin src="/static/game.js"></script>
+  <script type="module" crossorigin src="/static/game2.js"></script>
+  <link rel="stylesheet" crossorigin href="/static/game.css" />
 </head>
 <body>
   <div class="grid-container">
@@ -192,7 +194,15 @@
       <div>{{ config.message }}</div>
       {% endif %}
     </div>
-    <div id="root" class="grid-middle"></div>
+    <div id="root" class="grid-middle">
+      <iframe 
+        src="/static/game.html"
+        width="100%"
+        height="800px"
+        style="border: 1px solid #ccc; border-radius: 8px;"
+        title="Crafting Game"
+      ></iframe>
+    </div>
     <div id="scratchpad-div" class="grid-right">
       <h1><strong>Scratchpad</strong></h1>
       <form>
@@ -207,7 +217,7 @@
       class="btn btn-primary btn-lg submit"
       onClick="handleNextButton();"
     >
-      Next
+      Submit
     </button>
   </div>
   <script>

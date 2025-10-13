@@ -1,14 +1,20 @@
-import re
+import json
 import random
+import re
+import time
+from dataclasses import asdict, replace
+from typing import Optional
 
-from flask import request
 import psynet.experiment
+from dallinger import db
+from dallinger.experiment import experiment_route
+from flask import request
+from markupsafe import Markup
 from psynet.bot import Bot
-from psynet.modular_page import ModularPage, Prompt, TextControl, Control
-from psynet.utils import NoArgumentProvided
+from psynet.modular_page import Control, ModularPage, Prompt, TextControl
 from psynet.page import InfoPage, SuccessfulEndPage
 from psynet.participant import Participant
-from psynet.timeline import FailedValidation, Timeline, CodeBlock, conditional, join
+from psynet.timeline import CodeBlock, FailedValidation, Timeline, conditional, join
 from psynet.trial.imitation_chain import (
     ImitationChainNetwork,
     ImitationChainNode,
@@ -16,18 +22,34 @@ from psynet.trial.imitation_chain import (
     ImitationChainTrialMaker,
 )
 from psynet.trial.main import Trial
-from psynet.trial.static import StaticTrial, StaticTrialMaker, StaticNode
-from psynet.utils import get_logger
-from markupsafe import Markup
-from dallinger import db
-from dallinger.experiment import experiment_route
-from typing import Optional
-from .constants import starting_elements, crafting_table
+from psynet.trial.static import StaticNode, StaticTrial, StaticTrialMaker
+from psynet.utils import NoArgumentProvided, get_logger
+from src.constants import Tool
+from src.environment import CraftingGame
+from src.functions import DESCRIPTOR_FUNCTIONS
+from src.practice_environment import PracticeCraftingGame
+from src.practice_environment import combo_fn as practice_combo_fn
+from src.practice_environment import get_item_descriptor as practice_descriptor_fn
+from src.utils import dict_to_dataclass
+from src.world_model import MemoizedWorldModel
+
 from .consent import consent
 from .instructions import Instructions
 from .survey import chain_survey, immortal_individual_survey
 
 logger = get_logger()
+
+
+def get_item_description(item: dict, domain: str):
+    if isinstance(item, Tool):
+        return None
+
+    if domain == "practice":
+        descriptor_fn = practice_descriptor_fn
+    else:
+        descriptor_fn = DESCRIPTOR_FUNCTIONS[domain]
+
+    return descriptor_fn(item)
 
 
 class ScratchpadPrompt(Prompt):
@@ -91,7 +113,6 @@ class WriteMessagePage(ModularPage):
         bot_response,
         initial_value: str = "",
     ):
-
         super().__init__(
             label,
             ScratchpadPrompt(
@@ -150,10 +171,9 @@ class CraftingGameChainTrial(ImitationChainTrial):
     time_estimate = 20 + 300 + 60
 
     def make_definition(self, experiment, participant):
-        return {**self.node.definition, "starting_n_actions": 30}
+        return {**self.node.definition, "domain": "cooking"}
 
     def show_trial(self, experiment, participant):
-
         empty_message = False
         if len(self.definition["messages"]) == 0:
             empty_message = True
@@ -170,7 +190,7 @@ class CraftingGameChainTrial(ImitationChainTrial):
         )
         game_page = ModularPage(
             "game",
-            Prompt("Please play the game below. Press 'Next' when you are done."),
+            Prompt("Please play the game below. Press 'Submit' when you are done."),
             control=CraftingGameControl(message="" if empty_message else message),
             time_estimate=300,
         )
@@ -194,13 +214,12 @@ class CraftingGameIndividualTrial(StaticTrial):
     time_estimate = 20 + 600 + 60
 
     def make_definition(self, experiment, participant):
-        return {"inventories": [], "starting_n_actions": 90}
+        return {"inventories": [], "domain": "cooking"}
 
     def show_trial(self, experiment, participant):
-
         game_page = ModularPage(
             "game",
-            Prompt("Please play the game below. Press 'Next' when you are done."),
+            Prompt("Please play the game below. Press 'Submit' when you are done."),
             control=CraftingGameControl(message=None),
             time_estimate=600,
         )
@@ -208,7 +227,6 @@ class CraftingGameIndividualTrial(StaticTrial):
 
 
 class MessagePassingNode(ImitationChainNode):
-
     def create_initial_seed(self, experiment, participant):
         return {"messages": [], "inventories": []}
 
@@ -239,7 +257,6 @@ class CraftingGameChainTrialMaker(ImitationChainTrialMaker):
 
 
 class CraftingGameIndividualNode(StaticNode):
-
     def create_initial_seed(self, experiment, participant):
         return {"inventories": []}
 
@@ -287,9 +304,14 @@ def assign_to_condition(participant, experiment):
 
 class Exp(psynet.experiment.Experiment):
     label = "Crafting in chains"
-    n_chains = 4
-    chain_length = 3
-    n_immortal_individuals = 6
+    n_chains = 10
+    chain_length = 4
+    n_immortal_individuals = 10
+
+    variables = {
+        "world_models": {},
+        "cached_combinations": {},
+    }
 
     timeline = Timeline(
         consent,
@@ -345,106 +367,113 @@ class Exp(psynet.experiment.Experiment):
     def test_check_bot(self, bot: Bot, **kwargs):
         assert len(bot.alive_trials) == 1
 
-    @experiment_route("/api/start", methods=["GET"])
+    @experiment_route("/api/init", methods=["GET"])
     @classmethod
     def get_start_items(cls):
-
-        # get the trial
+        # check if we already have an inventory for this trial
         unique_id = re.search(
             r"(?<=\?unique_id=)([A-Z]|[a-z]|\d|:)+", request.values["urlParams"]
         ).group(0)
         participant = Participant.query.filter_by(unique_id=unique_id).one()
         trial = participant.current_trial
-        if not trial.var.has("inventory"):
-            # if we initialize with the last participant's inventory, then
-            print("populating inventory...")
-            if trial.definition["inventories"] == []:
-                print("inventories empty")
-                trial.var.inventory = starting_elements
-            else:
-                # get the final inventory of the last participant
-                print("inventories not empty")
-                trial.var.inventory = trial.definition["inventories"][-1]
 
+        print(f"trial: {trial}")
+        print(f"trial.var: {trial.var}")
+        print(f"trial.definition: {trial.definition}")
+
+        if trial.var.has("inventory"):
+            # if we initialize with the last participant's inventory, then
+            return {"inventory": trial.var.inventory}
+
+        domain = trial.definition["domain"]
+        if domain == "practice":
+            game = PracticeCraftingGame()
+        else:
+            game = CraftingGame("", domain)
+        game.reset()
+
+        for i in range(len(game.inventory)):
+            if isinstance(game.inventory[i], Tool):
+                continue
+            game.inventory[i] = replace(
+                game.inventory[i],
+                description=get_item_description(game.inventory[i], domain),
+            )
+
+        inventory = [asdict(item) for item in game.inventory]
+        trial.var.inventory = inventory
         db.session.commit()
 
-        return {"elements": trial.var.inventory}
+        print(f"returning inventory: {inventory}")
 
-    @experiment_route("/api/combine", methods=["POST"])
+        return {
+            "inventory": inventory,
+        }
+
+    @experiment_route("/api/step", methods=["POST"])
     @classmethod
-    def combine(cls):
+    def step(cls):
         """
-        Return the result of crafting two items together
+        Take a step in the game (i.e. combine two items together)
         """
         unique_id = re.search(
             r"(?<=\?unique_id=)([A-Z]|[a-z]|\d|:)+", request.values["urlParams"]
-        )
-
-        # get the items to combine and the result
-        item1, item2 = request.values["item1"], request.values["item2"]
-        pair = frozenset((item1, item2))
-        if pair not in crafting_table:
-            result = None
-        else:
-            result = crafting_table[pair]
-            result["discovered"] = True
-
-        # log the craft in the trial
-        participant = Participant.query.filter_by(unique_id=unique_id.group(0)).one()
+        ).group(0)
+        print("unique ID", unique_id)
+        participant = Participant.query.filter_by(unique_id=unique_id).one()
         trial = participant.current_trial
-        if not trial.var.has("crafts"):
-            trial.var.crafts = ()
-        trial.var.crafts = trial.var.crafts + (
-            {
-                "item1": item1,
-                "item2": item2,
-                "result": None if result is None else result["text"],
-                "value": None if result is None else result["value"],
-            },
-        )
+        experiment = cls.new(db.session)
 
-        # set the inventory if it hasn't already been set
-        if not trial.var.has("inventory"):
-            cls.get_start_items(cls)
-        if result is not None and result["text"] not in [
-            element["text"] for element in trial.var.inventory
-        ]:
-            trial.var.inventory = trial.var.inventory + (result,)
+        action = request.values.getlist("action[]")
 
-        # decrement the number of steps
-        if not trial.var.has("n_steps"):
-            cls.get_n_steps(cls)
-        trial.var.n_steps = trial.var.n_steps - 1
+        print(f"action: {action}")
 
-        db.session.commit()
+        item1, item2 = action
+
+        item1 = dict_to_dataclass(json.loads(item1))
+        item2 = dict_to_dataclass(json.loads(item2))
+
+        domain = trial.definition["domain"]
+        if domain == "practice":
+            new_item = practice_combo_fn(item1, item2)
+            sleep_time = max(random.gauss(0.3, 0.1), 0.01)
+            time.sleep(sleep_time)
+        else:
+            # if the item is in the cache, then use the cached combination
+            cached_combinations = experiment.var.cached_combinations.get(domain, {})
+            if frozenset((str(item1), str(item2))) in cached_combinations:
+                new_item = cached_combinations[frozenset((str(item1), str(item2)))]
+            else:
+                world_model_str = experiment.var.world_models.get(
+                    domain, MemoizedWorldModel("none", "cooking").dumps()
+                )
+
+                world_model = MemoizedWorldModel("none", "cooking")
+                world_model.loads(world_model_str)
+
+                new_item = world_model.combine_elements(item1, item2)
+                cached_combinations[frozenset((str(item1), str(item2)))] = new_item
+                # update the cached combinations and the world model
+                experiment.var.cached_combinations[domain] = cached_combinations
+                experiment.var.world_models[domain] = world_model.dumps()
+
+                # cache the combination and update the world model
+                db.session.commit()
+
+        # if the item is none (we combined two tools) then return that
+        if new_item is None:
+            return {"new_item": None}
+
+        new_item = replace(new_item, description=get_item_description(new_item, domain))
 
         # return the created element
         return {
-            "message": "element created",
-            "element": result,
+            "new_item": new_item,
         }
-
-    @experiment_route("/api/n-steps", methods=["GET"])
-    @classmethod
-    def get_n_steps(cls):
-
-        # get the trial
-        unique_id = re.search(
-            r"(?<=\?unique_id=)([A-Z]|[a-z]|\d|:)+", request.values["urlParams"]
-        ).group(0)
-
-        participant = Participant.query.filter_by(unique_id=unique_id).one()
-        trial = participant.current_trial
-        if not trial.var.has("n_steps"):
-            trial.var.n_steps = trial.definition["starting_n_actions"]
-        db.session.commit()
-
-        return {"n_steps": trial.var.n_steps}
 
     @experiment_route("/api/set-scratchpad", methods=["POST"])
     @classmethod
     def set_scratchpad(cls):
-
         # get the trial
         unique_id = re.search(
             r"(?<=\?unique_id=)([A-Z]|[a-z]|\d|:)+", request.values["urlParams"]
@@ -459,7 +488,6 @@ class Exp(psynet.experiment.Experiment):
     @experiment_route("/api/get-scratchpad", methods=["GET"])
     @classmethod
     def get_scratchpad(cls):
-
         # get the trial
         unique_id = re.search(
             r"(?<=\?unique_id=)([A-Z]|[a-z]|\d|:)+", request.values["urlParams"]

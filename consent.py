@@ -1,7 +1,6 @@
-from dominate.tags import div, p, h1, strong, em, a
-
+from dominate.tags import a, div, em, h1, p, strong
 from psynet.consent import NoConsent
-from psynet.modular_page import ModularPage, CheckboxControl
+from psynet.modular_page import CheckboxControl, ModularPage
 from psynet.timeline import Module, join
 
 time_estimate_min = 10

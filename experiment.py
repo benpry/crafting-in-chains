@@ -1,4 +1,5 @@
 import json
+import os
 import random
 import re
 import time
@@ -148,10 +149,13 @@ class CraftingGameControl(Control):
     macro = "crafting_game"
     external_template = "custom_macros.html"
 
-    def __init__(self, message: Optional[str], show_next_button: bool = False):
+    def __init__(
+        self, message: Optional[str], round_number: int, show_next_button: bool = False
+    ):
         super().__init__(
             show_next_button=show_next_button,
         )
+        self.round_number = round_number
         # format the message as HTML
         if message is None:
             return
@@ -163,15 +167,18 @@ class CraftingGameControl(Control):
                 self.message += f"<p>{m}</p>"
 
     def format_answer(self, raw_answer, **kwargs):
-        print(f"formatting answer: {raw_answer}")
         return raw_answer
 
 
+CHAIN_N_TRIALS_PER_DOMAIN = 10
+INDIVIDUAL_N_TRIALS_PER_DOMAIN = 40
+
+
 class CraftingGameChainTrial(ImitationChainTrial):
-    time_estimate = 20 + 300 + 60
+    time_estimate = 20 + 30 * 10 + 60
 
     def make_definition(self, experiment, participant):
-        return {**self.node.definition, "domain": "cooking"}
+        return {**self.node.definition, "domain": self.node.block}
 
     def show_trial(self, experiment, participant):
         empty_message = False
@@ -183,47 +190,81 @@ class CraftingGameChainTrial(ImitationChainTrial):
             for m in self.definition["messages"][-1].split("\n"):
                 message += f"<p>{m}</p>"
 
-        read_message_page = InfoPage(
-            Markup(message),
-            time_estimate=20,
-            css_links=["/static/text-style.css"],
+        pages = []
+        pages.append(
+            InfoPage(
+                Markup(message),
+                time_estimate=20,
+                css_links=["/static/text-style.css"],
+            )
         )
-        game_page = ModularPage(
-            "game",
-            Prompt("Please play the game below. Press 'Submit' when you are done."),
-            control=CraftingGameControl(message="" if empty_message else message),
-            time_estimate=300,
-        )
-        write_message_page = WriteMessagePage(
-            "message",
-            self.id,
-            time_estimate=60,
-            bot_response=lambda: self.definition["messages"][-1]
-            + "\nBeep boop, I am a bot.",
-            initial_value=(
-                self.node.definition["messages"][-1]
-                if len(self.node.definition["messages"]) > 0
-                else ""
-            ),
+        for i in range(1, CHAIN_N_TRIALS_PER_DOMAIN + 1):
+            pages.append(
+                ModularPage(
+                    "game",
+                    Prompt("Round " + str(i)),
+                    control=CraftingGameControl(
+                        message="" if empty_message else message,
+                        round_number=i,
+                    ),
+                    time_estimate=30,
+                )
+            )
+        pages.append(
+            WriteMessagePage(
+                "message",
+                self.id,
+                time_estimate=60,
+                bot_response=lambda: self.definition["messages"][-1]
+                + "\nBeep boop, I am a bot.",
+                initial_value=(
+                    self.node.definition["messages"][-1]
+                    if len(self.node.definition["messages"]) > 0
+                    else ""
+                ),
+            )
         )
 
-        return [read_message_page, game_page, write_message_page]
+        participant.var.completed_domains = [
+            d
+            for d in participant.var.completed_domains
+            if d != self.definition["domain"]
+        ]
+
+        return pages
 
 
 class CraftingGameIndividualTrial(StaticTrial):
-    time_estimate = 20 + 600 + 60
+    time_estimate = 30 * 10 + 60
 
     def make_definition(self, experiment, participant):
         return {"inventories": [], "domain": "cooking"}
 
     def show_trial(self, experiment, participant):
-        game_page = ModularPage(
-            "game",
-            Prompt("Please play the game below. Press 'Submit' when you are done."),
-            control=CraftingGameControl(message=None),
-            time_estimate=600,
+        pages = []
+        for _ in range(INDIVIDUAL_N_TRIALS_PER_DOMAIN):
+            pages.append(
+                ModularPage(
+                    "game",
+                    Prompt(
+                        "Please play the game below. Press 'Submit' when you are done."
+                    ),
+                    control=CraftingGameControl(message=None),
+                    time_estimate=600,
+                )
+            )
+
+        pages.append(
+            WriteMessagePage(
+                "message",
+                self.id,
+                time_estimate=60,
+                bot_response=lambda: self.definition["messages"][-1]
+                + "\nBeep boop, I am a bot.",
+            )
         )
-        return [game_page]
+
+        return pages
 
 
 class MessagePassingNode(ImitationChainNode):
@@ -255,6 +296,10 @@ class CraftingGameChainTrialMaker(ImitationChainTrialMaker):
     # There's a long tail of trial durations, so we'll set the timeout to 30 minutes
     response_timeout_sec = 60 * 40
 
+    def choose_block_order(self, experiment, participant, blocks):
+        block_order = random.sample(list(blocks), len(blocks))
+        return block_order
+
 
 class CraftingGameIndividualNode(StaticNode):
     def create_initial_seed(self, experiment, participant):
@@ -273,6 +318,10 @@ def assign_to_condition(participant, experiment):
     """
     # get the number of free chains
     print(f"assigning participant {participant.id} to condition...")
+    # TODO: fix before deployment
+    participant.var.condition = "chain"
+    participant.var.completed_domains = []
+    return
     chains = ImitationChainNetwork.query.filter_by(full=False)
     n_free_chains = len([chain for chain in chains if chain.head.is_free])
     print(f"n_free_chains: {n_free_chains}")
@@ -299,14 +348,36 @@ def assign_to_condition(participant, experiment):
         ["chain", "individual"], weights=[p_chain, p_individual]
     )
     print(f"assigning to {assignment}")
-    participant.var.condition = assignment[0]
+
+
+# def choose_participant_group(participant):
+#     domains = ["cooking", "decorations", "animals", "potions"]
+#     print(f"choosing participant group for participant {participant.id}")
+#     completed_domains = participant.var.completed_domains
+#     non_completed_domains = [
+#         domain for domain in domains if domain not in completed_domains
+#     ]
+#     print(f"non_completed_domains: {non_completed_domains}")
+#     chosen_domain = random.choice(non_completed_domains)
+#     print(f"chosen domain: {chosen_domain}")
+#     return chosen_domain
+
+
+DOMAINS = ["cooking", "decorations", "animals", "potions"]
+
+chain_starting_nodes = []
+individual_starting_nodes = []
+for domain in DOMAINS:
+    chain_starting_nodes += [MessagePassingNode(block=domain) for _ in range(3)]
+
+    individual_starting_nodes.append(CraftingGameIndividualNode(block=domain))
 
 
 class Exp(psynet.experiment.Experiment):
     label = "Crafting in chains"
-    n_chains = 10
+    n_chains = 12
     chain_length = 4
-    n_immortal_individuals = 10
+    n_immortal_individuals = 12
 
     variables = {
         "world_models": {},
@@ -323,16 +394,18 @@ class Exp(psynet.experiment.Experiment):
             == "chain",
             logic_if_true=join(
                 CraftingGameChainTrialMaker(
-                    id_="chain_task",
+                    id_="chain_trial_1",
                     network_class=ImitationChainNetwork,
                     trial_class=CraftingGameChainTrial,
                     node_class=MessagePassingNode,
                     chain_type="across",
                     max_nodes_per_chain=chain_length,
-                    max_trials_per_participant=1,
-                    expected_trials_per_participant=1,
-                    chains_per_participant=1,
+                    max_trials_per_participant=4,
+                    max_trials_per_block=1,
+                    expected_trials_per_participant=4,
+                    chains_per_participant=4,
                     chains_per_experiment=n_chains,
+                    start_nodes=chain_starting_nodes,
                     trials_per_node=1,
                     balance_across_chains=True,
                     check_performance_at_end=False,
@@ -346,7 +419,7 @@ class Exp(psynet.experiment.Experiment):
                 CraftingGameIndividualTrialMaker(
                     id_="individual_task",
                     trial_class=CraftingGameIndividualTrial,
-                    nodes=[CraftingGameIndividualNode()],
+                    nodes=individual_starting_nodes,
                     expected_trials_per_participant=1,
                     check_performance_at_end=False,
                     check_performance_every_trial=False,
@@ -369,21 +442,29 @@ class Exp(psynet.experiment.Experiment):
 
     @experiment_route("/api/init", methods=["GET"])
     @classmethod
-    def get_start_items(cls):
+    def initialize(cls):
         # check if we already have an inventory for this trial
         unique_id = re.search(
             r"(?<=\?unique_id=)([A-Z]|[a-z]|\d|:)+", request.values["urlParams"]
         ).group(0)
         participant = Participant.query.filter_by(unique_id=unique_id).one()
         trial = participant.current_trial
+        round_number = request.values["roundNumber"]
 
-        print(f"trial: {trial}")
-        print(f"trial.var: {trial.var}")
-        print(f"trial.definition: {trial.definition}")
+        # initialize things that need initializing
+        if not trial.var.has("inventories"):
+            trial.var.inventories = {}
+        if not trial.var.has("actions"):
+            trial.var.actions = {}
+        if not trial.var.has("scores"):
+            trial.var.scores = {}
 
-        if trial.var.has("inventory"):
-            # if we initialize with the last participant's inventory, then
-            return {"inventory": trial.var.inventory}
+        # initialize the list of actions for the round
+        if round_number not in trial.var.actions:
+            trial.var.actions[round_number] = []
+
+        if round_number in trial.var.inventories:
+            return {"inventory": trial.var.inventories[round_number]}
 
         domain = trial.definition["domain"]
         if domain == "practice":
@@ -401,10 +482,10 @@ class Exp(psynet.experiment.Experiment):
             )
 
         inventory = [asdict(item) for item in game.inventory]
-        trial.var.inventory = inventory
+        inventories = trial.var.inventories
+        inventories[round_number] = inventory
+        trial.var.inventories = inventories
         db.session.commit()
-
-        print(f"returning inventory: {inventory}")
 
         return {
             "inventory": inventory,
@@ -419,14 +500,13 @@ class Exp(psynet.experiment.Experiment):
         unique_id = re.search(
             r"(?<=\?unique_id=)([A-Z]|[a-z]|\d|:)+", request.values["urlParams"]
         ).group(0)
-        print("unique ID", unique_id)
+        round_number = request.values["roundNumber"]
+
         participant = Participant.query.filter_by(unique_id=unique_id).one()
         trial = participant.current_trial
         experiment = cls.new(db.session)
 
         action = request.values.getlist("action[]")
-
-        print(f"action: {action}")
 
         item1, item2 = action
 
@@ -445,10 +525,15 @@ class Exp(psynet.experiment.Experiment):
                 new_item = cached_combinations[frozenset((str(item1), str(item2)))]
             else:
                 world_model_str = experiment.var.world_models.get(
-                    domain, MemoizedWorldModel("none", "cooking").dumps()
+                    domain,
+                    MemoizedWorldModel(
+                        os.environ.get("MODEL_STRING", "openai/gpt-oss-20b"),
+                        domain,
+                        assign_names=True,
+                    ).dumps(),
                 )
 
-                world_model = MemoizedWorldModel("none", "cooking")
+                world_model = MemoizedWorldModel("", domain, assign_names=True)
                 world_model.loads(world_model_str)
 
                 new_item = world_model.combine_elements(item1, item2)
@@ -457,8 +542,29 @@ class Exp(psynet.experiment.Experiment):
                 experiment.var.cached_combinations[domain] = cached_combinations
                 experiment.var.world_models[domain] = world_model.dumps()
 
-                # cache the combination and update the world model
-                db.session.commit()
+                # update the current inventory
+                inventories = trial.var.inventories
+                if not isinstance(item1, Tool):
+                    inventories[round_number] = [
+                        item
+                        for item in inventories[round_number]
+                        if item["name"] != item1.name
+                    ]
+                if not isinstance(item2, Tool):
+                    inventories[round_number] = [
+                        item
+                        for item in inventories[round_number]
+                        if item["name"] != item2.name
+                    ]
+                if new_item is not None:
+                    inventories[round_number].append(asdict(new_item))
+                trial.var.inventories = inventories
+
+        actions = trial.var.actions
+        actions[round_number] += [(asdict(item1), asdict(item2), asdict(new_item))]
+        trial.var.actions = actions
+
+        db.session.commit()
 
         # if the item is none (we combined two tools) then return that
         if new_item is None:
@@ -470,6 +576,23 @@ class Exp(psynet.experiment.Experiment):
         return {
             "new_item": new_item,
         }
+
+    @experiment_route("/api/submit", methods=["POST"])
+    @classmethod
+    def finish(cls):
+        unique_id = re.search(
+            r"(?<=\?unique_id=)([A-Z]|[a-z]|\d|:)+", request.values["urlParams"]
+        ).group(0)
+        participant = Participant.query.filter_by(unique_id=unique_id).one()
+        trial = participant.current_trial
+
+        round_number = request.values["roundNumber"]
+        # update the scores
+        scores = trial.var.scores
+        scores[round_number] = request.values["score"]
+        trial.var.scores = scores
+
+        db.session.commit()
 
     @experiment_route("/api/set-scratchpad", methods=["POST"])
     @classmethod

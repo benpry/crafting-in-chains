@@ -18868,6 +18868,7 @@ function ej({
           .post("/api/step", {
             action: [JSON.stringify(b), JSON.stringify(O)],
             urlParams: window.location.search,
+            roundNumber: roundNumber,
           })
           .done((d) => {
             const c = d.new_item;
@@ -18955,7 +18956,7 @@ function ej({
     onDragEnd: y,
     children: [
       ne.jsx("main", {
-        className: "flex h-[70vh] flex-col border-b-2 border-slate-400",
+        className: "flex h-[60vh] flex-col border-b-2 border-slate-400",
         children: ne.jsxs("div", {
           className: "grid grid-cols-12 h-full",
           children: [

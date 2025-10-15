@@ -55,7 +55,7 @@
   window.addEventListener("load", function () {
     // get the inventory and populate the inventory-recap div
     dallinger
-      .get("/api/start", {
+      .get("/api/init", {
         urlParams: window.location.search,
       })
       .then((response) => {
@@ -146,6 +146,7 @@
 
   .grid-middle {
     grid-column: 2;
+    text-align: center;
   }
 
   .grid-right {
@@ -163,12 +164,11 @@
 
   #next-button {
     margin-top: 10px;
-    margin-left: calc(50% - 20px);
   }
 
   #scratchpad-div {
     width: 100%;
-    height: 605px;
+    height: 60vh;
   }
 
   #scratchpad {
@@ -194,14 +194,16 @@
       <div>{{ config.message }}</div>
       {% endif %}
     </div>
-    <div id="root" class="grid-middle">
-      <iframe 
-        src="/static/game.html"
-        width="100%"
-        height="800px"
-        style="border: 1px solid #ccc; border-radius: 8px;"
-        title="Crafting Game"
-      ></iframe>
+    <div class="grid-middle">
+      <div id="root"></div>
+      <button
+        type="button"
+        id="next-button"
+        class="btn btn-primary btn-lg submit"
+        onClick="handleNextButton();"
+      >
+        Submit
+    </button>
     </div>
     <div id="scratchpad-div" class="grid-right">
       <h1><strong>Scratchpad</strong></h1>
@@ -210,17 +212,8 @@
       </form>
     </div>
   </div>
-  <div style="width: 100%">
-    <button
-      type="button"
-      id="next-button"
-      class="btn btn-primary btn-lg submit"
-      onClick="handleNextButton();"
-    >
-      Submit
-    </button>
-  </div>
   <script>
+    const roundNumber = {{ config.round_number }};
     const scratchpad = document.getElementById("scratchpad");
     // call the server when the scratchpad changes
     scratchpadChanged = function () {
@@ -255,26 +248,29 @@
     };
 
     const handleNextButton = function () {
-      dallinger
-        .get("/api/n-steps", {
-          urlParams: window.location.search,
-        })
-        .then((response) => {
-          if (response.n_steps == 0) {
-            let width = $("#next-button").width();
-            let height = $("#next-button").height();
-            $("#next-button").width(width); // Locks the button width to the current width
-            $("#next-button").height(height);
-            disableButton();
-            function onRejection() {
-              enableButton();
-            }
-            psynet.submitResponse(onRejection);
-          } else {
-            alert(`You still have ${response.n_steps} actions left to try!`);
-          }
-        });
+      const score_text = document.getElementById("score-display").innerText;
+      console.log("score text:", score_text);
+      const score = parseInt(score_text.replace("Score: ", ""));
+      console.log("score:", score);
+
+      const width = $("#next-button").width();
+      const height = $("#next-button").height();
+      $("#next-button").width(width); // Locks the button width to the current width
+      $("#next-button").height(height);
+      disableButton();
+      function onRejection() {
+        enableButton();
+      }
+
+      dallinger.post("/api/submit", {
+        score: score,
+        roundNumber: roundNumber,
+        urlParams: window.location.search,
+      });
+
+      psynet.submitResponse(onRejection);
     };
+
   </script>
 </body>
 

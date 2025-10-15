@@ -6,4 +6,10 @@ numpy
 pandas
 soundfile
 IPython
+frozendict
+gymnasium
+instructor
+openai
+groq
+unicards
 oecraft @ git+https://github.com/benpry/open-ended-crafting.git

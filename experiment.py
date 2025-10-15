@@ -15,7 +15,14 @@ from psynet.bot import Bot
 from psynet.modular_page import Control, ModularPage, Prompt, TextControl
 from psynet.page import InfoPage, SuccessfulEndPage
 from psynet.participant import Participant
-from psynet.timeline import CodeBlock, FailedValidation, Timeline, conditional, join
+from psynet.timeline import (
+    CodeBlock,
+    FailedValidation,
+    Timeline,
+    conditional,
+    join,
+    while_loop,
+)
 from psynet.trial.imitation_chain import (
     ImitationChainNetwork,
     ImitationChainNode,
@@ -35,8 +42,9 @@ from src.utils import dict_to_dataclass
 from src.world_model import MemoizedWorldModel
 
 from .consent import consent
+from .constants import BLOCK_HEADERS
 from .instructions import Instructions
-from .survey import chain_survey, immortal_individual_survey
+from .survey import survey
 
 logger = get_logger()
 
@@ -193,6 +201,13 @@ class CraftingGameChainTrial(ImitationChainTrial):
         pages = []
         pages.append(
             InfoPage(
+                Markup(BLOCK_HEADERS[self.definition["domain"]]),
+                time_estimate=10,
+                css_links=["/static/text-style.css"],
+            )
+        )
+        pages.append(
+            InfoPage(
                 Markup(message),
                 time_estimate=20,
                 css_links=["/static/text-style.css"],
@@ -225,12 +240,6 @@ class CraftingGameChainTrial(ImitationChainTrial):
             )
         )
 
-        participant.var.completed_domains = [
-            d
-            for d in participant.var.completed_domains
-            if d != self.definition["domain"]
-        ]
-
         return pages
 
 
@@ -242,13 +251,18 @@ class CraftingGameIndividualTrial(StaticTrial):
 
     def show_trial(self, experiment, participant):
         pages = []
-        for _ in range(INDIVIDUAL_N_TRIALS_PER_DOMAIN):
+        pages.append(
+            InfoPage(
+                Markup(BLOCK_HEADERS[self.definition["domain"]]),
+                time_estimate=10,
+                css_links=["/static/text-style.css"],
+            )
+        )
+        for i in range(INDIVIDUAL_N_TRIALS_PER_DOMAIN):
             pages.append(
                 ModularPage(
                     "game",
-                    Prompt(
-                        "Please play the game below. Press 'Submit' when you are done."
-                    ),
+                    Prompt(f"Round {i}"),
                     control=CraftingGameControl(message=None),
                     time_estimate=600,
                 )
@@ -265,6 +279,45 @@ class CraftingGameIndividualTrial(StaticTrial):
         )
 
         return pages
+
+
+def practice_loop_condition(participant):
+    if not participant.var.has("practice_round_num"):
+        participant.var.practice_round_num = 1
+    else:
+        participant.var.practice_round_num += 1
+    return not participant.var.practice_completed
+
+
+class PracticeTrial(Trial):
+    time_estimate = 120
+
+    def show_trial(self, experiment, participant):
+        return join(
+            InfoPage(
+                Markup(BLOCK_HEADERS["practice"]),
+                time_estimate=10,
+                css_links=["/static/text-style.css"],
+            ),
+            while_loop(
+                "practice_loop",
+                practice_loop_condition,
+                ModularPage(
+                    "practice_game",
+                    Prompt(""),
+                    control=CraftingGameControl(message=None, round_number=0),
+                    time_estimate=30,
+                ),
+                expected_repetitions=4,
+            ),
+            InfoPage(
+                Markup(
+                    "Congratulations! You have completed the practice game. You can now move on to the main game."
+                ),
+                time_estimate=10,
+                css_links=["/static/text-style.css"],
+            ),
+        )
 
 
 class MessagePassingNode(ImitationChainNode):
@@ -316,20 +369,15 @@ def assign_to_condition(participant, experiment):
     """
     Assign the participant to either chain or immortal individual condition
     """
+    participant.var.practice_completed = False
+
     # get the number of free chains
-    print(f"assigning participant {participant.id} to condition...")
-    # TODO: fix before deployment
-    participant.var.condition = "chain"
-    participant.var.completed_domains = []
-    return
     chains = ImitationChainNetwork.query.filter_by(full=False)
     n_free_chains = len([chain for chain in chains if chain.head.is_free])
-    print(f"n_free_chains: {n_free_chains}")
+
+    # if there are no free chains, assign to the individual condition
     if n_free_chains == 0:
         participant.var.condition = "individual"
-        print(
-            f"No free chains. Assigning participant {participant.id} to individual condition"
-        )
         return
 
     # get the number of immortal individuals we still need
@@ -339,15 +387,15 @@ def assign_to_condition(participant, experiment):
     immortal_individuals_needed = max(
         experiment.n_immortal_individuals - immortal_individuals_completed_or_active, 0
     )
-    print(f"immortal_individuals_needed: {immortal_individuals_needed}")
+
+    # assign to conditions proportional to probability
     total_needed = n_free_chains + immortal_individuals_needed
     p_chain = n_free_chains / total_needed
     p_individual = 1 - p_chain
-    print(f"p_chain: {p_chain}, p_individual: {p_individual}")
     assignment = random.choices(
         ["chain", "individual"], weights=[p_chain, p_individual]
     )
-    print(f"assigning to {assignment}")
+    participant.var.condition = assignment[0]
 
 
 # def choose_participant_group(participant):
@@ -388,52 +436,48 @@ class Exp(psynet.experiment.Experiment):
         consent,
         CodeBlock(assign_to_condition),
         Instructions(),
+        PracticeTrial.cue({"domain": "practice"}),
         conditional(
             "chain_or_individual",
             condition=lambda participant, experiment: participant.var.condition
             == "chain",
-            logic_if_true=join(
-                CraftingGameChainTrialMaker(
-                    id_="chain_trial_1",
-                    network_class=ImitationChainNetwork,
-                    trial_class=CraftingGameChainTrial,
-                    node_class=MessagePassingNode,
-                    chain_type="across",
-                    max_nodes_per_chain=chain_length,
-                    max_trials_per_participant=4,
-                    max_trials_per_block=1,
-                    expected_trials_per_participant=4,
-                    chains_per_participant=4,
-                    chains_per_experiment=n_chains,
-                    start_nodes=chain_starting_nodes,
-                    trials_per_node=1,
-                    balance_across_chains=True,
-                    check_performance_at_end=False,
-                    check_performance_every_trial=False,
-                    recruit_mode="n_participants",
-                    target_n_participants=n_chains * chain_length,
-                ),
-                chain_survey,
+            logic_if_true=CraftingGameChainTrialMaker(
+                id_="chain_trial",
+                network_class=ImitationChainNetwork,
+                trial_class=CraftingGameChainTrial,
+                node_class=MessagePassingNode,
+                chain_type="across",
+                max_nodes_per_chain=chain_length,
+                max_trials_per_participant=4,
+                max_trials_per_block=1,
+                expected_trials_per_participant=4,
+                chains_per_participant=4,
+                chains_per_experiment=n_chains,
+                start_nodes=chain_starting_nodes,
+                trials_per_node=1,
+                balance_across_chains=True,
+                check_performance_at_end=False,
+                check_performance_every_trial=False,
+                recruit_mode="n_participants",
+                target_n_participants=n_chains * chain_length,
             ),
-            logic_if_false=join(
-                CraftingGameIndividualTrialMaker(
-                    id_="individual_task",
-                    trial_class=CraftingGameIndividualTrial,
-                    nodes=individual_starting_nodes,
-                    expected_trials_per_participant=1,
-                    check_performance_at_end=False,
-                    check_performance_every_trial=False,
-                    fail_trials_on_premature_exit=False,
-                    fail_trials_on_participant_performance_check=False,
-                    recruit_mode="n_participants",
-                    target_n_participants=n_immortal_individuals,
-                    assets=None,
-                    n_repeat_trials=0,
-                ),
-                immortal_individual_survey,
+            logic_if_false=CraftingGameIndividualTrialMaker(
+                id_="individual_task",
+                trial_class=CraftingGameIndividualTrial,
+                nodes=individual_starting_nodes,
+                expected_trials_per_participant=1,
+                check_performance_at_end=False,
+                check_performance_every_trial=False,
+                fail_trials_on_premature_exit=False,
+                fail_trials_on_participant_performance_check=False,
+                recruit_mode="n_participants",
+                target_n_participants=n_immortal_individuals,
+                assets=None,
+                n_repeat_trials=0,
             ),
             fix_time_credit=False,
         ),
+        survey,
         SuccessfulEndPage(),
     )
 
@@ -449,7 +493,10 @@ class Exp(psynet.experiment.Experiment):
         ).group(0)
         participant = Participant.query.filter_by(unique_id=unique_id).one()
         trial = participant.current_trial
-        round_number = request.values["roundNumber"]
+        if trial.definition["domain"] == "practice":
+            round_number = participant.var.practice_round_num
+        else:
+            round_number = request.values["roundNumber"]
 
         # initialize things that need initializing
         if not trial.var.has("inventories"):
@@ -461,7 +508,10 @@ class Exp(psynet.experiment.Experiment):
 
         # initialize the list of actions for the round
         if round_number not in trial.var.actions:
-            trial.var.actions[round_number] = []
+            print(f"trial.var.actions: {trial.var.actions}")
+            actions = trial.var.actions
+            actions[round_number] = []
+            trial.var.actions = actions
 
         if round_number in trial.var.inventories:
             return {"inventory": trial.var.inventories[round_number]}
@@ -500,10 +550,13 @@ class Exp(psynet.experiment.Experiment):
         unique_id = re.search(
             r"(?<=\?unique_id=)([A-Z]|[a-z]|\d|:)+", request.values["urlParams"]
         ).group(0)
-        round_number = request.values["roundNumber"]
 
         participant = Participant.query.filter_by(unique_id=unique_id).one()
         trial = participant.current_trial
+        if trial.definition["domain"] == "practice":
+            round_number = str(participant.var.practice_round_num)
+        else:
+            round_number = request.values["roundNumber"]
         experiment = cls.new(db.session)
 
         action = request.values.getlist("action[]")
@@ -560,6 +613,7 @@ class Exp(psynet.experiment.Experiment):
                     inventories[round_number].append(asdict(new_item))
                 trial.var.inventories = inventories
 
+        print(f"trial.var.actions: {trial.var.actions}")
         actions = trial.var.actions
         actions[round_number] += [(asdict(item1), asdict(item2), asdict(new_item))]
         trial.var.actions = actions
@@ -586,11 +640,19 @@ class Exp(psynet.experiment.Experiment):
         participant = Participant.query.filter_by(unique_id=unique_id).one()
         trial = participant.current_trial
 
-        round_number = request.values["roundNumber"]
+        if trial.definition["domain"] == "practice":
+            round_number = participant.var.practice_round_num
+        else:
+            round_number = request.values["roundNumber"]
+
         # update the scores
+        score = request.values["score"]
         scores = trial.var.scores
-        scores[round_number] = request.values["score"]
+        scores[round_number] = score
         trial.var.scores = scores
+
+        if trial.definition["domain"] == "practice" and int(score) >= 80:
+            participant.var.practice_completed = True
 
         db.session.commit()
 

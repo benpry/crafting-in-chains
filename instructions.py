@@ -1,6 +1,6 @@
-from dominate.tags import div, p, strong, img, link, span
+from dominate.tags import div, img, link, p, strong
 from psynet.page import InfoPage
-from psynet.timeline import Module, join, conditional
+from psynet.timeline import Module, conditional, join
 
 page1 = div()
 
@@ -9,208 +9,237 @@ with page1:
     link(rel="stylesheet", href="/static/big-font.css")
     p(
         """
-        In this experiment, you will play a game where you craft items together
-        and discover new items. The game interface looks like this:
+        Welcome! In this experiment, you will play a game where you use tools and
+        combine ingredients to make new items.
         """
     )
-
-    div(
-        img(src="static/instruction-screenshots/overview-game.png", alt=""),
-        style="text-align: center;",
-    )
-
     p(
         """
-        You have an inventory of items that you can combine together to discover new items.
-        You will start with a few basic items and will discover more items as you play.
-        You have infinite copies of the items in your inventory. You can think of combining
-        items as putting them together, using one item on the other, or using one in the context
-        of the other. You can combine
-        """,
-        strong("two different items"),
+        The game interface is shown below. It has an inventory of items, a
+        crafting area, and a progress bar.
         """
-        or
-        """,
-        strong("combine an item with itself."),
     )
-
+    img(
+        src="static/instruction-screenshots/interface-screenshot.png",
+        alt="Screenshot of the interface",
+    )
     p(
         """
-        To craft items together, first drag one item from your inventory to
-        the crafting area in the center of the board...
-        """,
+        You can combine any two items by clicking and dragging them into the
+        crafting area...
+        """
     )
-
+    img(
+        src="static/instruction-screenshots/inventory-screenshot.png",
+        alt="Screenshot of combining items",
+    )
+    p("...then dropping one on top of the other.")
     div(
         img(
-            src="static/instruction-screenshots/crafting-step1.png",
-            alt="",
-            style="max-width: 40ch;",
+            src="static/instruction-screenshots/combination-screenshot.png",
+            alt="Screenshot of combining items",
+            style="max-width: 50%;",
         ),
         style="text-align: center;",
     )
-
     p(
         """
-        ...then drag the second item on top of it.
+        Each item is either a
+        """,
+        strong("tool"),
         """
+        or an
+        """,
+        strong("ingredient"),
+        """. Tools have grey backgrounds and ingredients
+        have white backgrounds. Tools can be used as many times as you want, but
+        ingredients can only be used once.
+        """,
     )
 
-    div(
-        img(
-            src="static/instruction-screenshots/crafting-step2.png",
-            alt="",
-            style="max-width: 30ch;",
-        ),
-        style="text-align: center;",
-    )
+page2_chain = div()
 
-    p(
-        """
-        If the two items combine to make a new item, that item will be added to
-        your inventory. If the items do not combine, they will shake left and right.
-        """
-    )
-
-page2 = div()
-
-with page2:
+with page2_chain:
     link(rel="stylesheet", href="/static/text-style.css")
     link(rel="stylesheet", href="/static/big-font.css")
     p(
         """
-        Every item you discover has a value. Items are colored by their value:
-        basic
+        You will play the game in 4 different settings for 10 rounds each. In each setting, you will have the
         """,
-        span("(gray)", style="color: rgb(226 232 240);"),
-        """
-        common (white),
-        uncommon
+        strong("same tools"),
         """,
-        span("(green)", style="color: rgb(134 239 172);"),
-        """
-        , rare
+        but
         """,
-        span("(blue)", style="color: rgb(56 189 248);"),
-        """
-        , and legendary
-        """,
-        span("(purple)", style="color: rgb(167 139 250);"),
-    )
-
-    p(
-        """
-        You may discover more items than can fit on your screen at the same time.
-        If that happens, you can
-        """,
-        strong("scroll down"),
-        """
-        to see more items.
+        strong("different starting ingredients"),
+        """. As you play the game,
+        you will learn the rules that determine how items combine and how valuable
+        each item is. These rules might be intuitive, but they might also be
+        unintuitive, so you should try different combinations and see what
+        happens.
         """,
     )
-
-    p(
-        """
-        If the crafting area ever gets too crowded, you can press the
-        """,
-        strong("garbage"),
-        """
-        button to clear all the items from it.
-        """,
-    )
-
+    p("Every ingredient has a value shown next to its name.")
     div(
         img(
-            src="static/instruction-screenshots/garbage-button.png",
-            alt="",
-            style="max-width: 30ch;",
+            src="static/instruction-screenshots/value-screenshot.png",
+            alt="Screenshot of the value",
+            style="max-width: 50%;",
+        ),
+        style="text-align: center;",
+    )
+    p(
+        """
+        Your score in each round will be the value of the most valuable item you
+        created. For example, if you had the two items below in your inventory,
+        your score would be 16.
+        """
+    )
+    div(
+        img(
+            src="static/instruction-screenshots/multiple-values-screenshot.png",
+            alt="Screenshot of multiple items and their values",
+            style="max-width: 66%;",
+        ),
+        style="text-align: center;",
+    )
+    p(
+        """
+        Your score can't go below 0, even if all of your items have negative
+        values.
+        """,
+        strong("The maximum possible score is 100 in every round"),
+        ".",
+    )
+    p(
+        """
+        Ingredients all have
+        """,
+        strong("features"),
+        """ that determine how they
+        combine with other ingredients and how valuable they are. These features
+        change when you apply tools or combine them with other ingredients. You
+        can see an ingredient's features by hovering over it with your mouse.
+        """,
+    )
+    div(
+        img(
+            src="static/instruction-screenshots/features-screenshot.png",
+            alt="Screenshot of an ingredient's features",
+            style="max-width: 50%;",
         ),
         style="text-align: center;",
     )
 
-    p(
-        """
-        You will earn a
-        """,
-        strong("bonus"),
-        """
-        that depends on the total value of all the items you discover. The higher the
-        total value, the higher your bonus will be.
-        """,
-    )
-
-
-chain_page = div()
-
-with chain_page:
+page2_individual = div()
+with page2_individual:
     link(rel="stylesheet", href="/static/text-style.css")
     link(rel="stylesheet", href="/static/big-font.css")
     p(
         """
-        Luckily, you don't have to discover everything by yourself! Before you play
-        the game, you will read a message from a previous participant who played
-        the same game as you.
-        """
+        You will play the game for 40 rounds with the
+        """,
+        strong("same tools"),
+        """,
+        but
+        """,
+        strong("different starting ingredients"),
+        """. As you play the game,
+        you will learn the rules that determine how items combine and how valuable
+        each item is. These rules might be intuitive, but they might also be
+        unintuitive, so you should try different combinations and see what
+        happens.
+        """,
     )
-
+    p("Every ingredient has a value shown next to its name.")
+    div(
+        img(
+            src="static/instruction-screenshots/value-screenshot.png",
+            alt="Screenshot of the value",
+            style="max-width: 50%;",
+        ),
+        style="text-align: center;",
+    )
     p(
         """
-        This message will continue to be visible on the left side of the game interface
-        while you play.
+        Your score in each round will be the value of the most valuable item you
+        created. For example, if you had the two items below in your inventory,
+        your score would be 16.
         """
     )
-
+    div(
+        img(
+            src="static/instruction-screenshots/multiple-values-screenshot.png",
+            alt="Screenshot of multiple items and their values",
+            style="max-width: 66%;",
+        ),
+        style="text-align: center;",
+    )
     p(
         """
-        After you have finished the game, you will write a message to help the
-        next participant. That participant will read your message and see all the items
-        you discovered.
-        """
+        Your score can't go below 0, even if all of your items have negative
+        values.
+        """,
+        strong("The maximum possible score is 100 in every round"),
+        ".",
     )
-
     p(
         """
-        While you play the game, you will be able to take notes using a scratchpad on the
-        right side of the screen. These notes will still be visible while you are writing your
-        message.
-        """
+        Ingredients all have
+        """,
+        strong("features"),
+        """ that determine how they
+        combine with other ingredients and how valuable they are. These features
+        change when you apply tools or combine them with other ingredients. You
+        can see an ingredient's features by hovering over it with your mouse.
+        """,
+    )
+    div(
+        img(
+            src="static/instruction-screenshots/features-screenshot.png",
+            alt="Screenshot of an ingredient's features",
+            style="max-width: 50%;",
+        ),
+        style="text-align: center;",
     )
 
-    img(src="static/instruction-screenshots/overview-full.png", alt="")
+page3_chain = div()
 
-    p(
-        """
-        You will earn another bonus based on how well the participant who reads
-        your message performs in the game, so make sure to write helpful messages!
-        """
-    )
-
-    p(
-        """
-        Press 'Next' when you are ready to continue.
-        """
-    )
-
-
-individual_page = div()
-
-with individual_page:
+with page3_chain:
     link(rel="stylesheet", href="/static/text-style.css")
     link(rel="stylesheet", href="/static/big-font.css")
     p(
         """
-        While you play the game, you will be able to take notes using a scratchpad on the
-        right side of the screen.
-        """
+        Before starting each setting, you will read a message from a previous participant who played in that setting. After playing in that setting, you will be asked to
+        """,
+        strong("write a message"),
+        """ to help the next participant do well. The message can contain whatever you want, and it should help the person reading it do well at the game.
+        """,
     )
-
-    img(src="static/instruction-screenshots/overview-scratchpad.png", alt="")
-
     p(
         """
-        Press 'Next' when you are ready to continue.
+        Your bonus will depend on both your scores and the scores of the person
+        who reads your message.
         """
     )
+    p('When you are ready, click the "Start" button to play a practice game.')
+    p("Good luck!")
+
+
+page3_individual = div()
+
+with page3_individual:
+    link(rel="stylesheet", href="/static/text-style.css")
+    link(rel="stylesheet", href="/static/big-font.css")
+    p(
+        """
+        When you are done playing the game, you will be asked to
+        """,
+        strong("write a message"),
+        """ that would be helpful to a future participant playing the same game. The message can contain whatever you want, and it should help the person reading it do well at the game.
+        """,
+    )
+    p('When you are ready, click the "Start" button to play a practice game.')
+    p("Good luck!")
 
 
 def Instructions():
@@ -218,13 +247,18 @@ def Instructions():
         "instructions",
         join(
             InfoPage(page1, time_estimate=15),
-            InfoPage(page2, time_estimate=15),
             conditional(
                 "show_message_passing_page",
                 condition=lambda participant, experiment: participant.var.condition
                 == "chain",
-                logic_if_true=InfoPage(chain_page, time_estimate=15),
-                logic_if_false=InfoPage(individual_page, time_estimate=15),
+                logic_if_true=join(
+                    InfoPage(page2_chain, time_estimate=15),
+                    InfoPage(page3_chain, time_estimate=15),
+                ),
+                logic_if_false=join(
+                    InfoPage(page2_individual, time_estimate=15),
+                    InfoPage(page3_individual, time_estimate=15),
+                ),
             ),
         ),
     )

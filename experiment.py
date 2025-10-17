@@ -1,5 +1,4 @@
 import json
-import os
 import random
 import re
 import time
@@ -32,8 +31,9 @@ from .crafting_classes import (
     CraftingGameIndividualTrial,
     CraftingGameIndividualTrialMaker,
     MessagePassingNode,
-    PracticeTrial,
+    PracticeRounds,
 )
+from .custom_vars import CUSTOM_VARS
 from .instructions import Instructions
 from .survey import survey
 
@@ -86,20 +86,23 @@ def assign_to_condition(participant, experiment):
 
 
 DOMAINS = ["cooking", "decorations", "animals", "potions"]
+CHAINS_PER_DOMAIN = 1
 
 chain_starting_nodes = []
 individual_starting_nodes = []
 for domain in DOMAINS:
-    chain_starting_nodes += [MessagePassingNode(block=domain) for _ in range(3)]
+    chain_starting_nodes += [
+        MessagePassingNode(block=domain) for _ in range(CHAINS_PER_DOMAIN)
+    ]
 
     individual_starting_nodes.append(CraftingGameIndividualNode(block=domain))
 
 
 class Exp(psynet.experiment.Experiment):
-    label = "Crafting in chains"
-    n_chains = 12
+    label = "Crafting Game"
+    n_chains = CHAINS_PER_DOMAIN * len(DOMAINS)
     chain_length = 4
-    n_immortal_individuals = 12
+    n_immortal_individuals = 4
 
     variables = {
         "world_models": {},
@@ -110,7 +113,7 @@ class Exp(psynet.experiment.Experiment):
         consent,
         CodeBlock(assign_to_condition),
         Instructions(),
-        PracticeTrial.cue({"domain": "practice"}),
+        PracticeRounds(),
         conditional(
             "chain_or_individual",
             condition=lambda participant, experiment: participant.var.condition
@@ -140,10 +143,12 @@ class Exp(psynet.experiment.Experiment):
                 trial_class=CraftingGameIndividualTrial,
                 nodes=individual_starting_nodes,
                 expected_trials_per_participant=1,
+                max_trials_per_participant=1,
                 check_performance_at_end=False,
                 check_performance_every_trial=False,
                 fail_trials_on_premature_exit=False,
                 fail_trials_on_participant_performance_check=False,
+                balance_across_nodes=True,
                 recruit_mode="n_participants",
                 target_n_participants=n_immortal_individuals,
                 assets=None,
@@ -167,30 +172,48 @@ class Exp(psynet.experiment.Experiment):
         ).group(0)
         participant = Participant.query.filter_by(unique_id=unique_id).one()
         trial = participant.current_trial
-        if trial.definition["domain"] == "practice":
+        if trial is None:
+            domain = "practice"
             round_number = participant.var.practice_round_num
         else:
             round_number = request.values["roundNumber"]
 
         # initialize things that need initializing
-        if not trial.var.has("inventories"):
-            trial.var.inventories = {}
-        if not trial.var.has("actions"):
-            trial.var.actions = {}
-        if not trial.var.has("scores"):
-            trial.var.scores = {}
+        if trial is None:
+            if not participant.var.has("practice_inventories"):
+                participant.var.practice_inventories = {}
+            if not participant.var.has("practice_actions"):
+                participant.var.practice_actions = {}
+            if not participant.var.has("practice_scores"):
+                participant.var.practice_scores = {}
 
-        # initialize the list of actions for the round
-        if round_number not in trial.var.actions:
-            print(f"trial.var.actions: {trial.var.actions}")
-            actions = trial.var.actions
-            actions[round_number] = []
-            trial.var.actions = actions
+            # initialize the list of actions for the round
+            if round_number not in participant.var.practice_actions:
+                actions = participant.var.practice_actions
+                actions[round_number] = []
+                participant.var.practice_actions = actions
 
-        if round_number in trial.var.inventories:
-            return {"inventory": trial.var.inventories[round_number]}
+            if round_number in participant.var.practice_inventories:
+                return {"inventory": participant.var.practice_inventories[round_number]}
 
-        domain = trial.definition["domain"]
+        else:
+            if not trial.var.has("inventories"):
+                trial.var.inventories = {}
+            if not trial.var.has("actions"):
+                trial.var.actions = {}
+            if not trial.var.has("scores"):
+                trial.var.scores = {}
+
+            # initialize the list of actions for the round
+            if round_number not in trial.var.actions:
+                actions = trial.var.actions
+                actions[round_number] = []
+                trial.var.actions = actions
+
+            if round_number in trial.var.inventories:
+                return {"inventory": trial.var.inventories[round_number]}
+
+        domain = "practice" if trial is None else trial.definition["domain"]
         if domain == "practice":
             game = PracticeCraftingGame()
         else:
@@ -205,10 +228,18 @@ class Exp(psynet.experiment.Experiment):
                 description=get_item_description(game.inventory[i], domain),
             )
 
+        # define the inventory and save it
         inventory = [asdict(item) for item in game.inventory]
-        inventories = trial.var.inventories
+        inventories = (
+            participant.var.practice_inventories
+            if trial is None
+            else trial.var.inventories
+        )
         inventories[round_number] = inventory
-        trial.var.inventories = inventories
+        if trial is None:
+            participant.var.practice_inventories = inventories
+        else:
+            trial.var.inventories = inventories
         db.session.commit()
 
         return {
@@ -227,10 +258,11 @@ class Exp(psynet.experiment.Experiment):
 
         participant = Participant.query.filter_by(unique_id=unique_id).one()
         trial = participant.current_trial
-        if trial.definition["domain"] == "practice":
+        if trial is None:
             round_number = str(participant.var.practice_round_num)
         else:
             round_number = request.values["roundNumber"]
+
         experiment = cls.new(db.session)
 
         action = request.values.getlist("action[]")
@@ -240,34 +272,47 @@ class Exp(psynet.experiment.Experiment):
         item1 = dict_to_dataclass(json.loads(item1))
         item2 = dict_to_dataclass(json.loads(item2))
 
-        domain = trial.definition["domain"]
+        domain = "practice" if trial is None else trial.definition["domain"]
         if domain == "practice":
             new_item = practice_combo_fn(item1, item2)
             sleep_time = max(random.gauss(0.3, 0.1), 0.01)
             time.sleep(sleep_time)
         else:
             # if the item is in the cache, then use the cached combination
-            cached_combinations = experiment.var.cached_combinations.get(domain, {})
+            cached_combinations = experiment.var.cached_combinations
+            domain_cached_combinations = cached_combinations.get(domain, {})
             if frozenset((str(item1), str(item2))) in cached_combinations:
                 new_item = cached_combinations[frozenset((str(item1), str(item2)))]
             else:
-                world_model_str = experiment.var.world_models.get(
+                world_models = experiment.var.world_models
+                world_model_str = world_models.get(
                     domain,
                     MemoizedWorldModel(
-                        os.environ.get("MODEL_STRING", "openai/gpt-oss-20b"),
+                        CUSTOM_VARS["model_string"],
                         domain,
                         assign_names=True,
                     ).dumps(),
                 )
 
-                world_model = MemoizedWorldModel("", domain, assign_names=True)
+                world_model = MemoizedWorldModel(
+                    "",
+                    domain,
+                    assign_names=True,
+                    reasoning_effort=CUSTOM_VARS["reasoning_effort"],
+                    groq_api_key=CUSTOM_VARS["groq_api_key"],
+                )
                 world_model.loads(world_model_str)
 
                 new_item = world_model.combine_elements(item1, item2)
-                cached_combinations[frozenset((str(item1), str(item2)))] = new_item
+                domain_cached_combinations[frozenset((str(item1), str(item2)))] = (
+                    new_item
+                )
                 # update the cached combinations and the world model
-                experiment.var.cached_combinations[domain] = cached_combinations
-                experiment.var.world_models[domain] = world_model.dumps()
+                cached_combinations[domain] = domain_cached_combinations
+                experiment.var.cached_combinations = cached_combinations
+
+                world_models[domain] = world_model.dumps()
+                experiment.var.world_models = world_models
 
                 # update the current inventory
                 inventories = trial.var.inventories
@@ -287,11 +332,17 @@ class Exp(psynet.experiment.Experiment):
                     inventories[round_number].append(asdict(new_item))
                 trial.var.inventories = inventories
 
-        print(f"trial.var.actions: {trial.var.actions}")
-        actions = trial.var.actions
+        # update the actions
+        actions = (
+            participant.var.practice_actions if trial is None else trial.var.actions
+        )
+        if round_number not in actions:
+            actions[round_number] = []
         actions[round_number] += [(asdict(item1), asdict(item2), asdict(new_item))]
-        trial.var.actions = actions
-
+        if trial is None:
+            participant.var.practice_actions = actions
+        else:
+            trial.var.actions = actions
         db.session.commit()
 
         # if the item is none (we combined two tools) then return that
@@ -314,18 +365,21 @@ class Exp(psynet.experiment.Experiment):
         participant = Participant.query.filter_by(unique_id=unique_id).one()
         trial = participant.current_trial
 
-        if trial.definition["domain"] == "practice":
+        if trial is None:
             round_number = participant.var.practice_round_num
         else:
             round_number = request.values["roundNumber"]
 
         # update the scores
         score = request.values["score"]
-        scores = trial.var.scores
+        scores = participant.var.practice_scores if trial is None else trial.var.scores
         scores[round_number] = score
-        trial.var.scores = scores
+        if trial is None:
+            participant.var.practice_scores = scores
+        else:
+            trial.var.scores = scores
 
-        if trial.definition["domain"] == "practice" and int(score) >= 80:
+        if trial is None and int(score) >= 80:
             participant.var.practice_completed = True
 
         db.session.commit()
@@ -339,10 +393,14 @@ class Exp(psynet.experiment.Experiment):
         ).group(0)
         participant = Participant.query.filter_by(unique_id=unique_id).one()
         trial = participant.current_trial
-        trial.var.scratchpad = request.values["scratchpad"]
+        scratchpad = request.values["scratchpad"]
+        if trial is None:
+            participant.var.practice_scratchpad = scratchpad
+        else:
+            trial.var.scratchpad = scratchpad
         db.session.commit()
 
-        return {"scratchpad": trial.var.scratchpad}
+        return {"scratchpad": scratchpad}
 
     @experiment_route("/api/get-scratchpad", methods=["GET"])
     @classmethod
@@ -353,8 +411,13 @@ class Exp(psynet.experiment.Experiment):
         ).group(0)
         participant = Participant.query.filter_by(unique_id=unique_id).one()
         trial = participant.current_trial
-        if not trial.var.has("scratchpad"):
+        if trial is None and not participant.var.has("practice_scratchpad"):
+            participant.var.practice_scratchpad = ""
+            db.session.commit()
+            scratchpad = participant.var.practice_scratchpad
+        elif trial is not None and not trial.var.has("scratchpad"):
             trial.var.scratchpad = ""
             db.session.commit()
+            scratchpad = trial.var.scratchpad
 
-        return {"scratchpad": trial.var.scratchpad}
+        return {"scratchpad": scratchpad}

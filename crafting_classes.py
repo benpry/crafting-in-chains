@@ -4,7 +4,7 @@ from typing import Optional
 from markupsafe import Markup
 from psynet.modular_page import Control, ModularPage, Prompt, TextControl
 from psynet.page import InfoPage
-from psynet.timeline import FailedValidation, join, while_loop
+from psynet.timeline import FailedValidation, Module, join, while_loop
 from psynet.trial.imitation_chain import (
     ImitationChainNode,
     ImitationChainTrial,
@@ -81,7 +81,7 @@ class WriteMessagePage(ModularPage):
         super().__init__(
             label,
             ScratchpadPrompt(
-                "The next participant will build upon the items you have discovered. They will start with the following items in their inventory:",
+                "The next participant will play the same game as you. Please write a message that will help them perform well.",
                 trial_id,
             ),
             control=PrepopulatedTextControl(
@@ -102,6 +102,7 @@ class WriteMessagePage(ModularPage):
             return raw_answer.strip()
 
     def validate(self, response, **kwargs):
+        print(f"response: {response}")
         if response.answer == "":
             return FailedValidation(
                 "It looks like you left the message blank. Please write a message to help the next participant."
@@ -150,7 +151,7 @@ class CraftingGameChainTrial(ImitationChainTrial):
             empty_message = True
             message = "<p>You are the first participant, so there is no message for you to read.</p>"
         else:
-            message = "<p>The previous participant sent you this message:</p>"
+            message = ""
             for m in self.definition["messages"][-1].split("\n"):
                 message += f"<p>{m}</p>"
 
@@ -173,7 +174,7 @@ class CraftingGameChainTrial(ImitationChainTrial):
             pages.append(
                 ModularPage(
                     "game",
-                    Prompt("Round " + str(i)),
+                    Prompt(Markup(f"<h1>Round {i}</h1>")),
                     control=CraftingGameControl(
                         message="" if empty_message else message,
                         round_number=i,
@@ -200,7 +201,7 @@ class CraftingGameChainTrial(ImitationChainTrial):
 
 
 class CraftingGameIndividualTrial(StaticTrial):
-    time_estimate = 30 * 10 + 60
+    time_estimate = 10 + 30 * 40 + 60
 
     def make_definition(self, experiment, participant):
         return {"inventories": [], "domain": "cooking"}
@@ -214,11 +215,11 @@ class CraftingGameIndividualTrial(StaticTrial):
                 css_links=["/static/text-style.css"],
             )
         )
-        for i in range(INDIVIDUAL_N_TRIALS_PER_DOMAIN):
+        for i in range(1, INDIVIDUAL_N_TRIALS_PER_DOMAIN + 1):
             pages.append(
                 ModularPage(
                     "game",
-                    Prompt(f"Round {i}"),
+                    Prompt(Markup(f"<h1>Round {i}</h1>")),
                     control=CraftingGameControl(message=None, round_number=i),
                     time_estimate=30,
                 )
@@ -245,11 +246,10 @@ def practice_loop_condition(participant):
     return not participant.var.practice_completed
 
 
-class PracticeTrial(Trial):
-    time_estimate = 120
-
-    def show_trial(self, experiment, participant):
-        return join(
+def PracticeRounds():
+    return Module(
+        "practice_rounds",
+        join(
             InfoPage(
                 Markup(BLOCK_HEADERS["practice"]),
                 time_estimate=10,
@@ -273,7 +273,8 @@ class PracticeTrial(Trial):
                 time_estimate=10,
                 css_links=["/static/text-style.css"],
             ),
-        )
+        ),
+    )
 
 
 class MessagePassingNode(ImitationChainNode):
@@ -303,7 +304,7 @@ class MessagePassingNode(ImitationChainNode):
 
 class CraftingGameChainTrialMaker(ImitationChainTrialMaker):
     # There's a long tail of trial durations, so we'll set the timeout to 30 minutes
-    response_timeout_sec = 60 * 40
+    response_timeout_sec = 60 * 60
 
     def choose_block_order(self, experiment, participant, blocks):
         block_order = random.sample(list(blocks), len(blocks))

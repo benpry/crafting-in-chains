@@ -29,3 +29,6 @@ deploy/
 deploy_logs/
 
 source_code.zip
+
+# file to store api keys, etc.
+custom_vars.py

@@ -11,7 +11,7 @@ auto_recruit = false
 initial_recruitment_size = 6
 wage_per_hour = 0
 base_payment = 2
-prolific_estimated_completion_minutes = 10
+prolific_estimated_completion_minutes = 30
 
 # Set prescreeners manually:
 # - Approval rate >95%

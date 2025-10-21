@@ -105,13 +105,15 @@
 
   #scratchpad-div {
     width: 100%;
-    height: 60vh;
+    height: calc(60vh - 1.2rem);
   }
 
   #scratchpad {
     width: 100%;
     height: 100%;
     border: 1px solid grey;
+    padding: 0.3rem;
+    resize: none;
   }
 </style>
 <head>
@@ -150,7 +152,7 @@
     </div>
   </div>
   <script>
-    const roundNumber = {{ config.round_number }};
+    const roundNum = {{ config.round_number }};
     const scratchpad = document.getElementById("scratchpad");
     // call the server when the scratchpad changes
     scratchpadChanged = function () {
@@ -201,7 +203,7 @@
 
       dallinger.post("/api/submit", {
         score: score,
-        roundNumber: roundNumber,
+        roundNumber: roundNum,
         urlParams: window.location.search,
       });
 

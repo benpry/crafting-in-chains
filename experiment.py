@@ -11,7 +11,7 @@ from flask import request
 from psynet.bot import Bot
 from psynet.page import SuccessfulEndPage
 from psynet.participant import Participant
-from psynet.timeline import CodeBlock, Timeline, conditional
+from psynet.timeline import CodeBlock, Timeline, conditional, join
 from psynet.trial.imitation_chain import ImitationChainNetwork
 from psynet.utils import get_logger
 from src.constants import Tool
@@ -34,7 +34,7 @@ from .crafting_classes import (
     PracticeRounds,
 )
 from .custom_vars import CUSTOM_VARS
-from .instructions import Instructions
+from .instructions import BasicInstructions, ChainInstructions, IndividualInstructions
 from .survey import survey
 
 logger = get_logger()
@@ -50,6 +50,10 @@ def get_item_description(item: dict, domain: str):
         descriptor_fn = DESCRIPTOR_FUNCTIONS[domain]
 
     return descriptor_fn(item)
+
+
+def initialize_participant(participant):
+    participant.var.practice_completed = False
 
 
 def assign_to_condition(participant, experiment):
@@ -75,9 +79,22 @@ def assign_to_condition(participant, experiment):
         experiment.n_immortal_individuals - immortal_individuals_completed_or_active, 0
     )
 
+    chain_participants_completed_or_active = (
+        CraftingGameChainTrial.query.filter_by(failed=False).count() // 4
+    )
+
+    chain_participants_needed = max(
+        experiment.chain_length * experiment.n_chains // 4
+        - chain_participants_completed_or_active,
+        0,
+    )
+
     # assign to conditions proportional to probability
-    total_needed = n_free_chains + immortal_individuals_needed
-    p_chain = n_free_chains / total_needed
+    total_needed = max(chain_participants_needed + immortal_individuals_needed, 1)
+    p_chain = chain_participants_needed / total_needed
+    print(f"number of immortal individuals needed: {immortal_individuals_needed}")
+    print(f"number of chain participants needed: {chain_participants_needed}")
+    print(f"p_chain: {p_chain}")
     p_individual = 1 - p_chain
     assignment = random.choices(
         ["chain", "individual"], weights=[p_chain, p_individual]
@@ -111,48 +128,55 @@ class Exp(psynet.experiment.Experiment):
 
     timeline = Timeline(
         consent,
-        CodeBlock(assign_to_condition),
-        Instructions(),
+        CodeBlock(initialize_participant),
+        BasicInstructions(),
         PracticeRounds(),
+        CodeBlock(assign_to_condition),
         conditional(
             "chain_or_individual",
             condition=lambda participant, experiment: participant.var.condition
             == "chain",
-            logic_if_true=CraftingGameChainTrialMaker(
-                id_="chain_trial",
-                network_class=ImitationChainNetwork,
-                trial_class=CraftingGameChainTrial,
-                node_class=MessagePassingNode,
-                chain_type="across",
-                max_nodes_per_chain=chain_length,
-                max_trials_per_participant=4,
-                max_trials_per_block=1,
-                expected_trials_per_participant=4,
-                chains_per_participant=4,
-                chains_per_experiment=n_chains,
-                start_nodes=chain_starting_nodes,
-                trials_per_node=1,
-                balance_across_chains=True,
-                check_performance_at_end=False,
-                check_performance_every_trial=False,
-                recruit_mode="n_participants",
-                target_n_participants=n_chains * chain_length,
+            logic_if_true=join(
+                ChainInstructions(),
+                CraftingGameChainTrialMaker(
+                    id_="chain_trial",
+                    network_class=ImitationChainNetwork,
+                    trial_class=CraftingGameChainTrial,
+                    node_class=MessagePassingNode,
+                    chain_type="across",
+                    max_nodes_per_chain=chain_length,
+                    max_trials_per_participant=4,
+                    max_trials_per_block=1,
+                    expected_trials_per_participant=4,
+                    chains_per_participant=4,
+                    chains_per_experiment=n_chains,
+                    start_nodes=chain_starting_nodes,
+                    trials_per_node=1,
+                    balance_across_chains=True,
+                    check_performance_at_end=False,
+                    check_performance_every_trial=False,
+                    recruit_mode="n_participants",
+                    target_n_participants=n_chains * chain_length,
+                ),
             ),
-            logic_if_false=CraftingGameIndividualTrialMaker(
-                id_="individual_task",
-                trial_class=CraftingGameIndividualTrial,
-                nodes=individual_starting_nodes,
-                expected_trials_per_participant=1,
-                max_trials_per_participant=1,
-                check_performance_at_end=False,
-                check_performance_every_trial=False,
-                fail_trials_on_premature_exit=False,
-                fail_trials_on_participant_performance_check=False,
-                balance_across_nodes=True,
-                recruit_mode="n_participants",
-                target_n_participants=n_immortal_individuals,
-                assets=None,
-                n_repeat_trials=0,
+            logic_if_false=join(
+                IndividualInstructions(),
+                CraftingGameIndividualTrialMaker(
+                    id_="individual_task",
+                    trial_class=CraftingGameIndividualTrial,
+                    nodes=individual_starting_nodes,
+                    expected_trials_per_participant=1,
+                    max_trials_per_participant=1,
+                    check_performance_at_end=False,
+                    check_performance_every_trial=False,
+                    fail_trials_on_premature_exit=False,
+                    fail_trials_on_participant_performance_check=False,
+                    balance_across_nodes=True,
+                    recruit_mode="n_trials",
+                    target_trials_per_node=n_immortal_individuals // 4,
+                    assets=None,
+                    n_repeat_trials=0,
+                ),
             ),
             fix_time_credit=False,
         ),
@@ -384,6 +408,8 @@ class Exp(psynet.experiment.Experiment):
 
         db.session.commit()
 
+        return {"completed": True}
+
     @experiment_route("/api/set-scratchpad", methods=["POST"])
     @classmethod
     def set_scratchpad(cls):
@@ -411,13 +437,15 @@ class Exp(psynet.experiment.Experiment):
         ).group(0)
         participant = Participant.query.filter_by(unique_id=unique_id).one()
         trial = participant.current_trial
-        if trial is None and not participant.var.has("practice_scratchpad"):
-            participant.var.practice_scratchpad = ""
-            db.session.commit()
+        if trial is None:
+            if not participant.var.has("practice_scratchpad"):
+                participant.var.practice_scratchpad = ""
+                db.session.commit()
             scratchpad = participant.var.practice_scratchpad
-        elif trial is not None and not trial.var.has("scratchpad"):
-            trial.var.scratchpad = ""
-            db.session.commit()
+        else:
+            if not trial.var.has("scratchpad"):
+                trial.var.scratchpad = ""
+                db.session.commit()
             scratchpad = trial.var.scratchpad
 
         return {"scratchpad": scratchpad}

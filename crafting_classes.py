@@ -140,7 +140,7 @@ INDIVIDUAL_N_TRIALS_PER_DOMAIN = 40
 
 
 class CraftingGameChainTrial(ImitationChainTrial):
-    time_estimate = 20 + 30 * 10 + 60
+    time_estimate = 20 + 30 * CHAIN_N_TRIALS_PER_DOMAIN + 60
 
     def make_definition(self, experiment, participant):
         return {**self.node.definition, "domain": self.node.block}
@@ -165,7 +165,7 @@ class CraftingGameChainTrial(ImitationChainTrial):
         )
         pages.append(
             InfoPage(
-                Markup(message),
+                Markup("<h1>Message</h1>" + message),
                 time_estimate=20,
                 css_links=["/static/text-style.css"],
             )
@@ -201,10 +201,10 @@ class CraftingGameChainTrial(ImitationChainTrial):
 
 
 class CraftingGameIndividualTrial(StaticTrial):
-    time_estimate = 10 + 30 * 40 + 60
+    time_estimate = 10 + 30 * INDIVIDUAL_N_TRIALS_PER_DOMAIN + 60
 
     def make_definition(self, experiment, participant):
-        return {"inventories": [], "domain": "cooking"}
+        return {"inventories": [], "domain": self.node.block}
 
     def show_trial(self, experiment, participant):
         pages = []
@@ -265,13 +265,6 @@ def PracticeRounds():
                     time_estimate=30,
                 ),
                 expected_repetitions=4,
-            ),
-            InfoPage(
-                Markup(
-                    "Congratulations! You have completed the practice game. You can now move on to the main game."
-                ),
-                time_estimate=10,
-                css_links=["/static/text-style.css"],
             ),
         ),
     )

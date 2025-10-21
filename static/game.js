@@ -1,44 +1,41 @@
-import { f as x, j as e, r as t, G as f } from "./game2.js";
-function h() {
+import { f as u, j as e, r as t, G as x } from "./game2.js";
+function f() {
   const [l, i] = t.useState(0),
-    [n, o] = t.useState([]),
-    [r, c] = t.useState([]),
-    m = "cooking",
-    d = () => {
+    [r, n] = t.useState([]),
+    [o, c] = t.useState([]),
+    m = () => {
       dallinger
         .get("/api/init", {
           urlParams: window.location.search,
-          roundNumber: roundNumber,
+          roundNumber: roundNum,
         })
         .done((s) => {
-          console.log("got data", s),
-            s.inventory
-              ? o(s.inventory)
-              : (o([]),
-                alert(
-                  "Sorry! An error occurred in communicating with the server."
-                )),
+          s.inventory
+            ? n(s.inventory)
+            : (n([]),
+              alert(
+                "Sorry! An error occurred in communicating with the server."
+              )),
             c([]);
         });
     };
   return (
     t.useEffect(() => {
-      d();
+      m();
     }, []),
     t.useEffect(() => {
-      const s = [...n, ...r],
-        u = Math.max(...s.filter((a) => !a.tool).map((a) => a.value));
-      i(Math.max(u, 0));
-    }, [n, r]),
+      const s = [...r, ...o],
+        d = Math.max(...s.filter((a) => !a.tool).map((a) => a.value));
+      i(Math.max(d, 0));
+    }, [r, o]),
     e.jsxs("div", {
       className: "p-2",
       children: [
-        e.jsx(f, {
-          elements: n,
-          setElements: o,
-          placedElements: r,
+        e.jsx(x, {
+          elements: r,
+          setElements: n,
+          placedElements: o,
           setPlacedElements: c,
-          domain: m,
           setActions: () => {},
         }),
         e.jsx("div", {
@@ -56,6 +53,6 @@ function h() {
     })
   );
 }
-x(document.getElementById("root")).render(
-  e.jsx(t.StrictMode, { children: e.jsx(h, {}) })
+u(document.getElementById("root")).render(
+  e.jsx(t.StrictMode, { children: e.jsx(f, {}) })
 );

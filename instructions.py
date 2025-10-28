@@ -126,6 +126,25 @@ with page2:
         ),
         style="text-align: center;",
     )
+    p(
+        """
+        You can take notes throughout the experiment using the scratchpad on the right side of the screen. The text in the scratchpad will stay from round to round.
+        """
+    )
+    div(
+        img(
+            src="static/instruction-screenshots/scratchpad-screenshot.png",
+            alt="Screenshot of the scratchpad",
+            style="max-width: 50%;",
+        ),
+        style="text-align: center;",
+    )
+    p(
+        """
+        It is possible that one of your items might get stuck somewhere where you can't click it. If this happens, you can refresh the page and your inventory will be preserved.
+        """
+    )
+
     p('When you are ready, click the "Start" button to play a practice game.')
 
 page3_chain = div()

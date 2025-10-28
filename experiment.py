@@ -103,7 +103,7 @@ def assign_to_condition(participant, experiment):
 
 
 DOMAINS = ["cooking", "decorations", "animals", "potions"]
-CHAINS_PER_DOMAIN = 1
+CHAINS_PER_DOMAIN = 2
 
 chain_starting_nodes = []
 individual_starting_nodes = []

@@ -38,8 +38,9 @@ class ScratchpadPrompt(Prompt):
     def get_scratchpad_text(self):
         trial = Trial.query.filter_by(id=self.trial_id).one()
         text = ""
-        for m in trial.var.scratchpad.split("\n"):
-            text += f"<p>{m}</p>"
+        if trial.var.has("scratchpad"):
+            for m in trial.var.scratchpad.split("\n"):
+                text += f"<p>{m}</p>"
 
         return text
 
@@ -133,6 +134,11 @@ class CraftingGameControl(Control):
 
     def format_answer(self, raw_answer, **kwargs):
         return raw_answer
+
+    def get_bot_response(self, experiment, bot, page, prompt):
+        if not bot.var.practice_completed:
+            bot.var.practice_completed = True
+        return "Beep boop, I am a bot playing a game."
 
 
 CHAIN_N_TRIALS_PER_DOMAIN = 10

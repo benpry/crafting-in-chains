@@ -1,7 +1,7 @@
 [General]
-recruiter = hotair
-title = Learning experiment! (bonus payments, Chrome only)
-description = In this experiment, you will explore a virtual environment. You will earn a bonus that depends on how much you discover.
+recruiter = prolific
+title = Crafting game! (bonus payments, Chrome only)
+description = In this study, you will combine items together and learn how to make valuable items. You can earn a bonus of up to $1 based on your performance in the task. This study is only compatible with Google Chrome.
 show_reward = false
 show_footer = false
 currency = $
@@ -10,7 +10,8 @@ currency = $
 auto_recruit = false
 initial_recruitment_size = 6
 wage_per_hour = 0
-base_payment = 2
+base_payment = 6
+publish_experiment = false
 prolific_estimated_completion_minutes = 30
 
 # Set prescreeners manually:

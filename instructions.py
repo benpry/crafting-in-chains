@@ -135,7 +135,7 @@ with page2:
         img(
             src="static/instruction-screenshots/scratchpad-screenshot.png",
             alt="Screenshot of the scratchpad",
-            style="max-width: 50%;",
+            style="max-width: 70%;",
         ),
         style="text-align: center;",
     )

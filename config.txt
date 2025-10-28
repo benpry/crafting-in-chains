@@ -7,7 +7,7 @@ show_footer = false
 currency = $
 
 [Prolific]
-auto_recruit = false
+auto_recruit = true
 initial_recruitment_size = 6
 wage_per_hour = 0
 base_payment = 6

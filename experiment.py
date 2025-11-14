@@ -54,47 +54,56 @@ def get_item_description(item: dict, domain: str):
 
 def initialize_participant(participant):
     participant.var.practice_completed = False
+    participant.var.condition = None
 
 
 def assign_to_condition(participant, experiment):
     """
     Assign the participant to either chain or immortal individual condition
     """
-    participant.var.practice_completed = False
-
     # get the number of free chains
-    chains = ImitationChainNetwork.query.filter_by(full=False)
-    n_free_chains = len([chain for chain in chains if chain.head.is_free])
+    n_active_chain_participants = len(
+        [
+            p
+            for p in Participant.query.filter_by(failed=False, status="working").all()
+            if p.var.get("condition", None) == "chain"
+            and p.current_trial.failed is False
+        ]
+    )
 
-    # if there are no free chains, assign to the individual condition
-    if n_free_chains == 0:
+    if n_active_chain_participants >= CHAINS_PER_DOMAIN:
         participant.var.condition = "individual"
         return
 
     # get the number of immortal individuals we still need
-    immortal_individuals_completed_or_active = (
-        CraftingGameIndividualTrial.query.filter_by(failed=False).count()
+    participants_completed_or_active = Participant.query.filter_by(failed=False).all()
+    n_immortal_individuals = len(
+        [
+            p
+            for p in participants_completed_or_active
+            if p.var.get("condition", None) == "individual"
+        ]
     )
-    immortal_individuals_needed = max(
-        experiment.n_immortal_individuals - immortal_individuals_completed_or_active, 0
-    )
-
-    chain_participants_completed_or_active = (
-        CraftingGameChainTrial.query.filter_by(failed=False).count() // 4
+    n_chain_participants = len(
+        [
+            p
+            for p in participants_completed_or_active
+            if p.var.get("condition", None) == "chain"
+        ]
     )
 
     chain_participants_needed = max(
-        experiment.chain_length * experiment.n_chains // 4
-        - chain_participants_completed_or_active,
+        experiment.chain_length * CHAINS_PER_DOMAIN - n_chain_participants,
+        0,
+    )
+    immortal_individuals_needed = max(
+        experiment.n_immortal_individuals - n_immortal_individuals,
         0,
     )
 
     # assign to conditions proportional to probability
     total_needed = max(chain_participants_needed + immortal_individuals_needed, 1)
     p_chain = chain_participants_needed / total_needed
-    print(f"number of immortal individuals needed: {immortal_individuals_needed}")
-    print(f"number of chain participants needed: {chain_participants_needed}")
-    print(f"p_chain: {p_chain}")
     p_individual = 1 - p_chain
     assignment = random.choices(
         ["chain", "individual"], weights=[p_chain, p_individual]
@@ -119,7 +128,7 @@ class Exp(psynet.experiment.Experiment):
     label = "Crafting Game"
     n_chains = CHAINS_PER_DOMAIN * len(DOMAINS)
     chain_length = 4
-    n_immortal_individuals = 4
+    n_immortal_individuals = 8
 
     variables = {
         "world_models": {},
@@ -156,7 +165,7 @@ class Exp(psynet.experiment.Experiment):
                     check_performance_at_end=False,
                     check_performance_every_trial=False,
                     recruit_mode="n_participants",
-                    target_n_participants=n_chains * chain_length,
+                    target_n_participants=CHAINS_PER_DOMAIN,
                 ),
             ),
             logic_if_false=join(
@@ -183,6 +192,38 @@ class Exp(psynet.experiment.Experiment):
         survey,
         SuccessfulEndPage(),
     )
+
+    def recruit(self):
+        chains = ImitationChainNetwork.query.filter_by(full=False).all()
+        free_chains = [c for c in chains if c.head.is_free]
+        n_free_chains_per_domain = {
+            domain: len([c for c in free_chains if c.block == domain])
+            for domain in DOMAINS
+        }
+
+        min_free_chains = min(n_free_chains_per_domain.values())
+
+        participants_completed_or_active = Participant.query.filter_by(
+            failed=False
+        ).all()
+        n_immortal_individuals = len(
+            [
+                p
+                for p in participants_completed_or_active
+                if p.var.condition == "individual"
+            ]
+        )
+        immortal_individuals_needed = max(
+            self.n_immortal_individuals - n_immortal_individuals,
+            0,
+        )
+
+        if immortal_individuals_needed > 0 or min_free_chains > 0:
+            super().recruit()
+        else:
+            # otherwise, try again in 2 minutes
+            time.sleep(2 * 60)
+            self.recruit()
 
     def test_check_bot(self, bot: Bot, **kwargs):
         assert len(bot.alive_trials) == 1

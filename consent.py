@@ -115,6 +115,7 @@ consent = Module(
                 force_selection=True,
             ),
             time_estimate=10,
+            bot_response=lambda: '["I agree"]',
         ),
     ),
 )

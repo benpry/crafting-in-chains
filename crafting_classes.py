@@ -185,6 +185,7 @@ class CraftingGameChainTrial(ImitationChainTrial):
                         message="" if empty_message else message,
                         round_number=i,
                     ),
+                    bot_response=lambda: "",
                     time_estimate=30,
                 )
             )
@@ -193,8 +194,9 @@ class CraftingGameChainTrial(ImitationChainTrial):
                 "message",
                 self.id,
                 time_estimate=60,
-                bot_response=lambda: self.definition["messages"][-1]
-                + "\nBeep boop, I am a bot.",
+                bot_response=lambda: "Beep boop, I am a bot."
+                if len(self.node.definition["messages"]) == 0
+                else self.node.definition["messages"][-1] + "\nBeep boop, I am a bot.",
                 initial_value=(
                     self.node.definition["messages"][-1]
                     if len(self.node.definition["messages"]) > 0
@@ -227,6 +229,7 @@ class CraftingGameIndividualTrial(StaticTrial):
                     "game",
                     Prompt(Markup(f"<h1>Round {i}</h1>")),
                     control=CraftingGameControl(message=None, round_number=i),
+                    bot_response=lambda: "",
                     time_estimate=30,
                 )
             )
@@ -236,8 +239,7 @@ class CraftingGameIndividualTrial(StaticTrial):
                 "message",
                 self.id,
                 time_estimate=60,
-                bot_response=lambda: self.definition["messages"][-1]
-                + "\nBeep boop, I am a bot.",
+                bot_response=lambda: "Beep boop, I am a bot",
             )
         )
 
@@ -250,6 +252,12 @@ def practice_loop_condition(participant):
     else:
         participant.var.practice_round_num += 1
     return not participant.var.practice_completed
+
+
+def practice_bot_response(experiment, bot):
+    if not bot.var.practice_completed:
+        bot.var.practice_completed = True
+    return ""
 
 
 def PracticeRounds():
@@ -268,6 +276,7 @@ def PracticeRounds():
                     "practice_game",
                     Prompt(""),
                     control=CraftingGameControl(message=None, round_number=0),
+                    bot_response=practice_bot_response,
                     time_estimate=30,
                 ),
                 expected_repetitions=4,
@@ -302,8 +311,8 @@ class MessagePassingNode(ImitationChainNode):
 
 
 class CraftingGameChainTrialMaker(ImitationChainTrialMaker):
-    # There's a long tail of trial durations, so we'll set the timeout to 30 minutes
-    response_timeout_sec = 60 * 60
+    # 20 minute timeout for chain trials
+    response_timeout_sec = 20 * 60
 
     def choose_block_order(self, experiment, participant, blocks):
         block_order = random.sample(list(blocks), len(blocks))
@@ -316,6 +325,6 @@ class CraftingGameIndividualNode(StaticNode):
 
 
 class CraftingGameIndividualTrialMaker(StaticTrialMaker):
-    # There's a long tail of trial durations, so we'll set the timeout to 1 hour
+    # 60 minute timeout for individual trials
     response_timeout_sec = 60 * 60
     choose_participant_group = None

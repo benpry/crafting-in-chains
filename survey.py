@@ -37,4 +37,5 @@ survey = ModularPage(
     ),
     control=SurveyJSControl(survey_spec),
     time_estimate=90,
+    bot_response=lambda: "Test survey response",
 )

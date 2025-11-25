@@ -179,7 +179,7 @@ with page3_chain:
     p(
         """
         Your bonus will depend on both your scores and the scores of the person
-        who reads your message.
+        who reads your message. If nobody reads your message, we will double your individual bonus.
         """
     )
     p("Good luck!")
@@ -211,6 +211,12 @@ with page3_individual:
         strong("write a message"),
         """ that would be helpful to a future participant playing the same game. The message can contain whatever you want, and it should help the person reading it do well at the game.
         """,
+    )
+    p(
+        """
+        Your bonus will depend on both your scores and the scores of the person
+        who reads your message. If nobody reads your message, we will double your individual bonus.
+        """
     )
     p("Good luck!")
 

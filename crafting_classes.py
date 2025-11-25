@@ -1,6 +1,7 @@
 import random
 from typing import Optional
 
+from dallinger import db
 from markupsafe import Markup
 from psynet.modular_page import Control, ModularPage, Prompt, TextControl
 from psynet.page import InfoPage
@@ -12,9 +13,11 @@ from psynet.trial.imitation_chain import (
 )
 from psynet.trial.main import Trial
 from psynet.trial.static import StaticNode, StaticTrial, StaticTrialMaker
-from psynet.utils import NoArgumentProvided
+from psynet.utils import NoArgumentProvided, get_logger
 
 from .constants import BLOCK_HEADERS
+
+logger = get_logger()
 
 
 class ScratchpadPrompt(Prompt):
@@ -95,6 +98,7 @@ class WriteMessagePage(ModularPage):
             ),
             time_estimate=time_estimate,
         )
+        self.initial_value = initial_value
 
     def format_answer(self, raw_answer, **kwargs):
         if raw_answer is None:
@@ -102,11 +106,19 @@ class WriteMessagePage(ModularPage):
         else:
             return raw_answer.strip()
 
+    def pre_render(self):
+        print("calling pre_render")
+        self.warned_about_identical = False
+
     def validate(self, response, **kwargs):
-        print(f"response: {response}")
         if response.answer == "":
             return FailedValidation(
                 "It looks like you left the message blank. Please write a message to help the next participant."
+            )
+        if response.answer == self.initial_value and not self.warned_about_identical:
+            self.warned_about_identical = True
+            return FailedValidation(
+                "Are you sure you don't want to change the message you received? If so, you can click 'Next' again to submit."
             )
         return None
 
@@ -150,6 +162,54 @@ class CraftingGameChainTrial(ImitationChainTrial):
 
     def make_definition(self, experiment, participant):
         return {**self.node.definition, "domain": self.node.block}
+
+    def on_timeout(self, experiment):
+        """
+        Handle timeout by failing the participant, all their trials, and the node.
+        Also fails any child nodes generated from this trial.
+        """
+        participant = self.participant
+
+        # Fail all trials for this participant
+        for trial in participant.trials:
+            trial.fail()
+
+        # Fail the participant
+        participant.failed = True
+
+        # Fail the node associated with this trial
+        if hasattr(self, "node") and self.node is not None:
+            self.node.failed = True
+
+            # For chain trials, also fail any child nodes that were generated from this trial
+            # In imitation chains, child nodes are created when a trial completes successfully
+            # Since we're timing out, we need to check if any child nodes exist and fail them
+            # Check if the node has a network and find related nodes
+            if hasattr(self.node, "network") and self.node.network is not None:
+                network = self.node.network
+                # Find all nodes in the same network that come after this node
+                # In imitation chains, nodes are typically ordered by creation time
+                all_nodes = network.nodes
+                current_node_index = None
+                for i, node in enumerate(all_nodes):
+                    if node.id == self.node.id:
+                        current_node_index = i
+                        break
+
+                # Fail all nodes that come after this one in the chain
+                if current_node_index is not None:
+                    for node in all_nodes[current_node_index + 1 :]:
+                        node.failed = True
+            # Also check for direct children if the attribute exists
+            elif hasattr(self.node, "children"):
+                for child_node in self.node.children:
+                    child_node.failed = True
+
+        db.session.commit()
+        logger.info(
+            f"Timeout handled for chain trial {self.id}, participant {participant.id}, "
+            f"node {self.node.id if hasattr(self, 'node') and self.node else 'N/A'}"
+        )
 
     def show_trial(self, experiment, participant):
         empty_message = False
@@ -213,6 +273,29 @@ class CraftingGameIndividualTrial(StaticTrial):
 
     def make_definition(self, experiment, participant):
         return {"inventories": [], "domain": self.node.block}
+
+    def on_timeout(self, experiment):
+        """
+        Handle timeout by failing the participant, all their trials, and the node.
+        """
+        participant = self.participant
+
+        # Fail all trials for this participant
+        for trial in participant.trials:
+            trial.fail()
+
+        # Fail the participant
+        participant.failed = True
+
+        # Fail the node associated with this trial
+        if hasattr(self, "node") and self.node is not None:
+            self.node.failed = True
+
+        db.session.commit()
+        logger.info(
+            f"Timeout handled for individual trial {self.id}, participant {participant.id}, "
+            f"node {self.node.id if hasattr(self, 'node') and self.node else 'N/A'}"
+        )
 
     def show_trial(self, experiment, participant):
         pages = []
@@ -312,7 +395,7 @@ class MessagePassingNode(ImitationChainNode):
 
 class CraftingGameChainTrialMaker(ImitationChainTrialMaker):
     # 20 minute timeout for chain trials
-    response_timeout_sec = 20 * 60
+    response_timeout_sec = 3 * 60
 
     def choose_block_order(self, experiment, participant, blocks):
         block_order = random.sample(list(blocks), len(blocks))
@@ -326,5 +409,5 @@ class CraftingGameIndividualNode(StaticNode):
 
 class CraftingGameIndividualTrialMaker(StaticTrialMaker):
     # 60 minute timeout for individual trials
-    response_timeout_sec = 60 * 60
+    response_timeout_sec = 3 * 60
     choose_participant_group = None

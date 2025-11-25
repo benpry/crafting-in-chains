@@ -152,13 +152,27 @@
     </div>
   </div>
   <script>
-    const roundNum = {{ config.round_number }};
+    // Validate round_number exists and is valid
+    {% if config.round_number is none %}
+    const roundNum = null;
+    {% else %}
+    const roundNum = {{ config.round_number | tojson }};
+    {% endif %}
+    if (roundNum === null || roundNum === undefined || isNaN(roundNum)) {
+      console.error("Invalid round_number:", {{ config.round_number | tojson }});
+      alert("Error: Invalid round number. Please refresh the page or contact the experimenter.");
+      throw new Error("Invalid round_number configuration");
+    }
+
     const scratchpad = document.getElementById("scratchpad");
     // call the server when the scratchpad changes
     scratchpadChanged = function () {
       dallinger.post("/api/set-scratchpad", {
         scratchpad: scratchpad.value,
         urlParams: window.location.search,
+      }).fail(function(rejection) {
+        console.error("Error saving scratchpad:", rejection);
+        // Non-critical error, don't interrupt user flow
       });
     };
     scratchpad.addEventListener("input", scratchpadChanged);
@@ -171,6 +185,10 @@
         })
         .then((response) => {
           scratchpad.value = response.scratchpad;
+        })
+        .fail(function(rejection) {
+          console.error("Error loading scratchpad:", rejection);
+          // Non-critical error, continue anyway
         });
     });
 
@@ -187,10 +205,15 @@
     };
 
     const handleNextButton = function () {
+      // Validate roundNum before submitting
+      if (roundNum === null || roundNum === undefined || isNaN(roundNum)) {
+        console.error("Cannot submit: invalid round number:", roundNum);
+        alert("Error: Invalid round number. Please refresh the page or contact support.");
+        return;
+      }
+
       const score_text = document.getElementById("score-display").innerText;
-      console.log("score text:", score_text);
       const score = parseInt(score_text.replace("Score: ", ""));
-      console.log("score:", score);
 
       const width = $("#next-button").width();
       const height = $("#next-button").height();
@@ -205,9 +228,19 @@
         score: score,
         roundNumber: roundNum,
         urlParams: window.location.search,
+      }).then(function(response) {
+        if (response.completed) {
+          enableButton();
+          psynet.submitResponse(onRejection);
+        } else {
+          alert("You must make at least one combination before you can submit.");
+          enableButton();
+        }
+      }).fail(function(rejection) {
+        console.error("Error submitting round:", rejection);
+        enableButton();
+        alert("Error submitting round. Please try again or contact the experimenter.");
       });
-
-      psynet.submitResponse(onRejection);
     };
 
   </script>

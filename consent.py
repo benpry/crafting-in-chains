@@ -4,8 +4,8 @@ from psynet.modular_page import CheckboxControl, ModularPage
 from psynet.timeline import Module, join
 
 time_estimate_min = 30
-base_payment = 7
-max_bonus = 1
+base_payment = 6
+max_bonus = 2
 
 consent_form = div()
 

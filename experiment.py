@@ -67,11 +67,11 @@ def assign_to_condition(participant, experiment):
             p
             for p in Participant.query.filter_by(failed=False, status="working").all()
             if p.var.get("condition", None) == "chain"
-            and p.current_trial.failed is False
         ]
     )
 
     if n_active_chain_participants >= CHAINS_PER_DOMAIN:
+        print("too many active chain participants, assigning to individual")
         participant.var.condition = "individual"
         return
 
@@ -112,7 +112,7 @@ def assign_to_condition(participant, experiment):
 
 
 DOMAINS = ["cooking", "decorations", "animals", "potions"]
-CHAINS_PER_DOMAIN = 2
+CHAINS_PER_DOMAIN = 20
 
 chain_starting_nodes = []
 individual_starting_nodes = []
@@ -128,7 +128,7 @@ class Exp(psynet.experiment.Experiment):
     label = "Crafting Game"
     n_chains = CHAINS_PER_DOMAIN * len(DOMAINS)
     chain_length = 4
-    n_immortal_individuals = 8
+    n_immortal_individuals = 80
 
     variables = {
         "world_models": {},
@@ -239,9 +239,15 @@ class Exp(psynet.experiment.Experiment):
         trial = participant.current_trial
         if trial is None:
             domain = "practice"
-            round_number = participant.var.practice_round_num
+            round_number = str(participant.var.practice_round_num)
         else:
-            round_number = request.values["roundNumber"]
+            round_number = request.values.get("roundNumber")
+            if round_number is None:
+                logger.warning(
+                    f"Missing roundNumber in /api/init request for trial {trial.id if trial else 'None'}, "
+                    f"participant {participant.id}"
+                )
+                return {"error": "Missing roundNumber parameter"}, 400
 
         # initialize things that need initializing
         if trial is None:
@@ -326,9 +332,15 @@ class Exp(psynet.experiment.Experiment):
         if trial is None:
             round_number = str(participant.var.practice_round_num)
         else:
-            round_number = request.values["roundNumber"]
+            round_number = request.values.get("roundNumber")
+            if round_number is None:
+                logger.warning(
+                    f"Missing roundNumber in /api/step request for trial {trial.id if trial else 'None'}, "
+                    f"participant {participant.id}"
+                )
+                return {"error": "Missing roundNumber parameter"}, 400
 
-        experiment = cls.new(db.session)
+        experiment = Exp()
 
         action = request.values.getlist("action[]")
 
@@ -380,7 +392,33 @@ class Exp(psynet.experiment.Experiment):
                 experiment.var.world_models = world_models
 
                 # update the current inventory
+                # Ensure inventories dict exists and round_number entry exists
+                if not trial.var.has("inventories"):
+                    trial.var.inventories = {}
                 inventories = trial.var.inventories
+
+                # If round_number doesn't exist in inventories, initialize it
+                # This can happen if /api/init was never called for this round
+                if round_number not in inventories:
+                    logger.warning(
+                        f"Round {round_number} inventory not initialized in /api/step for trial {trial.id}, "
+                        f"initializing now. This may indicate /api/init was not called."
+                    )
+                    # Initialize inventory by calling the init logic
+                    domain = trial.definition["domain"]
+                    game = CraftingGame("", domain)
+                    game.reset()
+                    for i in range(len(game.inventory)):
+                        if isinstance(game.inventory[i], Tool):
+                            continue
+                        game.inventory[i] = replace(
+                            game.inventory[i],
+                            description=get_item_description(game.inventory[i], domain),
+                        )
+                    inventories[round_number] = [
+                        asdict(item) for item in game.inventory
+                    ]
+
                 if not isinstance(item1, Tool):
                     inventories[round_number] = [
                         item
@@ -398,9 +436,16 @@ class Exp(psynet.experiment.Experiment):
                 trial.var.inventories = inventories
 
         # update the actions
-        actions = (
-            participant.var.practice_actions if trial is None else trial.var.actions
-        )
+        # Ensure actions dict exists
+        if trial is None:
+            if not participant.var.has("practice_actions"):
+                participant.var.practice_actions = {}
+            actions = participant.var.practice_actions
+        else:
+            if not trial.var.has("actions"):
+                trial.var.actions = {}
+            actions = trial.var.actions
+
         if round_number not in actions:
             actions[round_number] = []
         actions[round_number] += [(asdict(item1), asdict(item2), asdict(new_item))]
@@ -431,13 +476,89 @@ class Exp(psynet.experiment.Experiment):
         trial = participant.current_trial
 
         if trial is None:
-            round_number = participant.var.practice_round_num
+            round_number = str(participant.var.practice_round_num)
         else:
-            round_number = request.values["roundNumber"]
+            round_number = request.values.get("roundNumber")
+            if round_number is None:
+                logger.warning(
+                    f"Missing roundNumber in /api/submit request for trial {trial.id if trial else 'None'}, "
+                    f"participant {participant.id}"
+                )
+                return {"error": "Missing roundNumber parameter"}, 400
 
         # update the scores
         score = request.values["score"]
-        scores = participant.var.practice_scores if trial is None else trial.var.scores
+
+        # Ensure scores dict exists
+        if trial is None:
+            if not participant.var.has("practice_scores"):
+                participant.var.practice_scores = {}
+            scores = participant.var.practice_scores
+        else:
+            if not trial.var.has("scores"):
+                trial.var.scores = {}
+            scores = trial.var.scores
+
+        # Ensure actions and inventories exist for this round (defensive initialization)
+        # This handles cases where /api/init was never called
+        if trial is None:
+            if not participant.var.has("practice_actions"):
+                participant.var.practice_actions = {}
+            if round_number not in participant.var.practice_actions:
+                participant.var.practice_actions[round_number] = []
+            if not participant.var.has("practice_inventories"):
+                participant.var.practice_inventories = {}
+            if round_number not in participant.var.practice_inventories:
+                logger.warning(
+                    f"Round {round_number} inventory not initialized in /api/submit for practice round, "
+                    f"participant {participant.id}. Initializing now."
+                )
+                game = PracticeCraftingGame()
+                game.reset()
+                for i in range(len(game.inventory)):
+                    if isinstance(game.inventory[i], Tool):
+                        continue
+                    game.inventory[i] = replace(
+                        game.inventory[i],
+                        description=get_item_description(game.inventory[i], "practice"),
+                    )
+                participant.var.practice_inventories[round_number] = [
+                    asdict(item) for item in game.inventory
+                ]
+        else:
+            if not trial.var.has("actions"):
+                trial.var.actions = {}
+            if round_number not in trial.var.actions:
+                trial.var.actions[round_number] = []
+            if not trial.var.has("inventories"):
+                trial.var.inventories = {}
+            if round_number not in trial.var.inventories:
+                logger.warning(
+                    f"Round {round_number} inventory not initialized in /api/submit for trial {trial.id}, "
+                    f"participant {participant.id}. Initializing now."
+                )
+                domain = trial.definition["domain"]
+                game = CraftingGame("", domain)
+                game.reset()
+                for i in range(len(game.inventory)):
+                    if isinstance(game.inventory[i], Tool):
+                        continue
+                    game.inventory[i] = replace(
+                        game.inventory[i],
+                        description=get_item_description(game.inventory[i], domain),
+                    )
+                trial.var.inventories[round_number] = [
+                    asdict(item) for item in game.inventory
+                ]
+
+        # if no actions have been taken so far, we can't submit
+        if trial is None:
+            actions = participant.var.practice_actions
+        else:
+            actions = trial.var.actions
+        if len(actions[round_number]) == 0:
+            return {"completed": False}
+
         scores[round_number] = score
         if trial is None:
             participant.var.practice_scores = scores

@@ -71,7 +71,7 @@ def assign_to_condition(participant, experiment):
     )
 
     if n_active_chain_participants >= CHAINS_PER_DOMAIN:
-        print("too many active chain participants, assigning to individual")
+        logger.info("too many active chain participants, assigning to individual")
         participant.var.condition = "individual"
         return
 
@@ -92,6 +92,12 @@ def assign_to_condition(participant, experiment):
         ]
     )
 
+    logger.info(
+        f"Assigning participant {participant.id} to condition.\n"
+        + f"n_chain_participants: {n_chain_participants}\n"
+        + f"n_immortal_individuals: {n_immortal_individuals}"
+    )
+
     chain_participants_needed = max(
         experiment.chain_length * CHAINS_PER_DOMAIN - n_chain_participants,
         0,
@@ -99,6 +105,11 @@ def assign_to_condition(participant, experiment):
     immortal_individuals_needed = max(
         experiment.n_immortal_individuals - n_immortal_individuals,
         0,
+    )
+
+    logger.info(
+        f"chain_participants_needed: {chain_participants_needed}\n"
+        + f"immortal_individuals_needed: {immortal_individuals_needed}"
     )
 
     # assign to conditions proportional to probability
@@ -112,7 +123,7 @@ def assign_to_condition(participant, experiment):
 
 
 DOMAINS = ["cooking", "decorations", "animals", "potions"]
-CHAINS_PER_DOMAIN = 20
+CHAINS_PER_DOMAIN = 1
 
 chain_starting_nodes = []
 individual_starting_nodes = []
@@ -128,7 +139,7 @@ class Exp(psynet.experiment.Experiment):
     label = "Crafting Game"
     n_chains = CHAINS_PER_DOMAIN * len(DOMAINS)
     chain_length = 4
-    n_immortal_individuals = 80
+    n_immortal_individuals = 0
 
     variables = {
         "world_models": {},
@@ -164,6 +175,7 @@ class Exp(psynet.experiment.Experiment):
                     balance_across_chains=True,
                     check_performance_at_end=False,
                     check_performance_every_trial=False,
+                    fail_trials_on_premature_exit=True,
                     recruit_mode="n_participants",
                     target_n_participants=CHAINS_PER_DOMAIN,
                 ),
@@ -178,7 +190,7 @@ class Exp(psynet.experiment.Experiment):
                     max_trials_per_participant=1,
                     check_performance_at_end=False,
                     check_performance_every_trial=False,
-                    fail_trials_on_premature_exit=False,
+                    fail_trials_on_premature_exit=True,
                     fail_trials_on_participant_performance_check=False,
                     balance_across_nodes=True,
                     recruit_mode="n_trials",
@@ -206,6 +218,11 @@ class Exp(psynet.experiment.Experiment):
         participants_completed_or_active = Participant.query.filter_by(
             failed=False
         ).all()
+        participants_completed_or_active = [
+            p
+            for p in participants_completed_or_active
+            if p.var.get("condition", None) is not None
+        ]
         n_immortal_individuals = len(
             [
                 p

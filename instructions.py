@@ -79,9 +79,9 @@ with page2:
     )
     p(
         """
-        Your score in each round will be the value of the most valuable item you
-        created. For example, if you had the two items below in your inventory,
-        your score would be 16.
+        Each item has a value shown next to its name. Your score in each round will be the value of
+        the most valuable item you created. For example, if you had the two items below in your
+        inventory, your score would be 16.
         """
     )
     div(

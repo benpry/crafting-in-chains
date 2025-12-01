@@ -5,7 +5,7 @@ from psynet.timeline import Module, join
 
 time_estimate_min = 30
 base_payment = 6
-max_bonus = 2
+max_bonus = 1
 
 consent_form = div()
 
@@ -63,16 +63,6 @@ with consent_form:
         """,
     )
 
-    p(
-        strong("PRIVACY AND CONFIDENTIALITY:"),
-        """ The risks associated with this study are
-        minimal. Study data will be stored securely, in compliance with Stanford
-        University standards, minimizing the risk of confidentiality breach.
-        Your individual privacy will be maintained during the research and in
-        all published and written data resulting from the study.
-        """,
-    )
-
     p(strong("CONTACT INFORMATION:"))
 
     p(
@@ -100,7 +90,7 @@ with consent_form:
 
     p("Please save or print a copy of this page for your records.")
 
-    p('If you agree to participate in this research, please click "I agree" below.')
+    p("If you agree to participate in this research, please click “I agree” below.")
 
 
 consent = Module(

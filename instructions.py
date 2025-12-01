@@ -15,8 +15,7 @@ with page1:
     )
     p(
         """
-        The game interface is shown below. It has an inventory of items, a
-        crafting area, and a progress bar.
+        The game interface is shown below. It has an inventory of items and a crafting area.
         """
     )
     img(
@@ -98,7 +97,7 @@ with page2:
         Your score can't go below 0, even if all of your items have negative
         values.
         """,
-        strong("The maximum possible score is 100 in every round"),
+        strong("The maximum possible score is 100 in every round."),
         """
         You will earn a
         """,
@@ -202,7 +201,7 @@ with page3_individual:
         """,
         but
         """,
-        strong("different starting ingredients"),
+        strong("different starting ingredients."),
     )
     p(
         """

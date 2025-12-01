@@ -358,7 +358,7 @@ class MessagePassingNode(ImitationChainNode):
 
 class CraftingGameChainTrialMaker(ImitationChainTrialMaker):
     # 20 minute timeout for chain trials
-    response_timeout_sec = 2 * 60
+    response_timeout_sec = 20 * 60
 
     def choose_block_order(self, experiment, participant, blocks):
         block_order = random.sample(list(blocks), len(blocks))

@@ -123,7 +123,7 @@ def assign_to_condition(participant, experiment):
 
 
 DOMAINS = ["cooking", "decorations", "animals", "potions"]
-CHAINS_PER_DOMAIN = 1
+CHAINS_PER_DOMAIN = 20
 
 chain_starting_nodes = []
 individual_starting_nodes = []
@@ -139,7 +139,7 @@ class Exp(psynet.experiment.Experiment):
     label = "Crafting Game"
     n_chains = CHAINS_PER_DOMAIN * len(DOMAINS)
     chain_length = 4
-    n_immortal_individuals = 0
+    n_immortal_individuals = 80
 
     variables = {
         "world_models": {},

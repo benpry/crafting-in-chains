@@ -8,7 +8,7 @@ currency = $
 
 [Prolific]
 auto_recruit = true
-initial_recruitment_size = 20
+initial_recruitment_size = 5
 wage_per_hour = 0
 base_payment = 6
 publish_experiment = false

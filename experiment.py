@@ -216,6 +216,8 @@ class Exp(psynet.experiment.Experiment):
     n_chains = CHAINS_PER_DOMAIN * len(DOMAINS)
     chain_length = 4
     n_immortal_individuals = 80
+    hard_max_experiment_payment = 10000
+    soft_max_experiment_payment = 10000
 
     variables = {
         "world_models": {},
@@ -284,6 +286,8 @@ class Exp(psynet.experiment.Experiment):
     )
 
     def recruit(self):
+        self.var.hard_max_experiment_payment = 10000
+        self.var.soft_max_experiment_payment = 10000
         chains = ImitationChainNetwork.query.filter_by(full=False).all()
         free_chains = [c for c in chains if c.head.is_free]
         n_free_chains_per_domain = {

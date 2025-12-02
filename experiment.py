@@ -1,4 +1,5 @@
 import json
+import logging
 import random
 import re
 import time
@@ -6,7 +7,13 @@ from dataclasses import asdict, replace
 
 import psynet.experiment
 from dallinger import db
+from dallinger.db import get_queue
 from dallinger.experiment import experiment_route
+from dallinger.experiment_server.worker_events import worker_function
+from dallinger.recruiters import (
+    ProlificRecruiter,
+    check_for_prolific_worker_status_discrepancy,
+)
 from flask import request
 from psynet.bot import Bot
 from psynet.page import SuccessfulEndPage
@@ -36,6 +43,45 @@ from .crafting_classes import (
 from .custom_vars import CUSTOM_VARS
 from .instructions import BasicInstructions, ChainInstructions, IndividualInstructions
 from .survey import survey
+
+
+def patched_verify_status_of(self, participants):
+    logger = logging.getLogger("dallinger.recruiters")
+    q = get_queue()
+    assignments_by_id = self.prolificservice.get_assignments_for_study(
+        self.current_study_id
+    )
+
+    for participant in participants:
+        latest_data = assignments_by_id.get(participant.assignment_id)
+        if latest_data is None:
+            logger.warning(
+                f"We found no assignment data for participant {participant.id} "
+                f"with assignment ID {participant.assignment_id} on Prolific! "
+                f"Marking as returned."
+            )
+            prolific_status = "RETURNED"
+        else:
+            prolific_status = latest_data["status"]
+
+        corrective_action = check_for_prolific_worker_status_discrepancy(
+            local_status=participant.status, prolific_status=prolific_status
+        )
+        if corrective_action:
+            logger.warning(
+                f"Taking corrective action on participant {participant.id}: {corrective_action}"
+            )
+            q.enqueue(
+                worker_function,
+                corrective_action,
+                participant.assignment_id,
+                participant.id,
+            )
+        else:
+            logger.debug(f"Status already in sync for {participant.id}")
+
+
+ProlificRecruiter.verify_status_of = patched_verify_status_of
 
 logger = get_logger()
 
@@ -144,6 +190,8 @@ class Exp(psynet.experiment.Experiment):
     variables = {
         "world_models": {},
         "cached_combinations": {},
+        "hard_max_experiment_payment": 10000,
+        "soft_max_experiment_payment": 10000,
     }
 
     timeline = Timeline(

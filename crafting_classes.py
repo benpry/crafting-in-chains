@@ -1,6 +1,7 @@
 import random
 from typing import Optional
 
+from dallinger import db
 from markupsafe import Markup
 from psynet.modular_page import Control, ModularPage, Prompt, TextControl
 from psynet.page import InfoPage
@@ -39,6 +40,7 @@ class FailParticipantOnTrialFailMixin:
         super().fail(fail_reason)
 
         # Now fail the participant
+        self.participant.status = "abandoned"
         self.participant.fail(reason=fail_reason)
 
         # And fail *all* other non-failed trials they own
@@ -133,6 +135,7 @@ class WriteMessagePage(ModularPage):
             time_estimate=time_estimate,
         )
         self.initial_value = initial_value
+        self.trial_id = trial_id
 
     def format_answer(self, raw_answer, **kwargs):
         if raw_answer is None:
@@ -140,20 +143,19 @@ class WriteMessagePage(ModularPage):
         else:
             return raw_answer.strip()
 
-    def pre_render(self):
-        print("calling pre_render")
-        self.warned_about_identical = False
-
     def validate(self, response, **kwargs):
         if response.answer == "":
             return FailedValidation(
                 "It looks like you left the message blank. Please write a message to help the next participant."
             )
-        if response.answer == self.initial_value and not self.warned_about_identical:
-            self.warned_about_identical = True
-            return FailedValidation(
-                "Are you sure you don't want to change the message you received? If so, you can click 'Next' again to submit."
-            )
+        if response.answer == self.initial_value:
+            trial = Trial.query.filter_by(id=self.trial_id).one()
+            if not trial.var.get("warned_about_identical", False):
+                trial.var.warned_about_identical = True
+                db.session.commit()
+                return FailedValidation(
+                    "Are you sure you don't want to change the message you received? If so, you can click 'Next' again to submit."
+                )
         return None
 
 

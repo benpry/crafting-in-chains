@@ -49,14 +49,13 @@ logger = get_logger()
 def _patched_get_submissions(self, study_id: str) -> list:
     # Use a dict keyed by submission ID to automatically deduplicate
     results_by_id = {}
-    prev_study_id = "692dcd2c1e2a670845ec8684"
+    prev_study_ids = ["692dcd2c1e2a670845ec8684", "692f35070fda77d195ec2885"]
 
-    for s_id in [prev_study_id, study_id]:
+    for s_id in [*prev_study_ids, study_id]:
         page = 1
         total_count = None
 
         if s_id is None:
-            print("current study id is None, continuing...")
             continue
 
         while True:
@@ -73,9 +72,6 @@ def _patched_get_submissions(self, study_id: str) -> list:
             # Get total count from first response
             if total_count is None:
                 total_count = response.get("meta", {}).get("count", 0)
-                logger.info(
-                    f"Prolific reports {total_count} total submissions for study {s_id}"
-                )
 
             page_results = response.get("results", [])
             if not page_results:
@@ -87,7 +83,6 @@ def _patched_get_submissions(self, study_id: str) -> list:
 
             # Check if we have all unique results
             if len(results_by_id) >= total_count:
-                logger.info(f"Collected all {total_count} unique submissions")
                 break
 
             # Check for next page
@@ -98,9 +93,6 @@ def _patched_get_submissions(self, study_id: str) -> list:
             page += 1
 
     all_results = list(results_by_id.values())
-    logger.info(
-        f"Fetched {len(all_results)} unique submissions for studies {study_id} and {prev_study_id} (Prolific reported {total_count})"
-    )
     return all_results
 
 

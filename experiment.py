@@ -1,5 +1,4 @@
 import json
-import logging
 import random
 import re
 import time
@@ -7,13 +6,7 @@ from dataclasses import asdict, replace
 
 import psynet.experiment
 from dallinger import db
-from dallinger.db import get_queue
 from dallinger.experiment import experiment_route
-from dallinger.experiment_server.worker_events import worker_function
-from dallinger.recruiters import (
-    ProlificRecruiter,
-    check_for_prolific_worker_status_discrepancy,
-)
 from flask import request
 from psynet.bot import Bot
 from psynet.page import SuccessfulEndPage
@@ -44,46 +37,81 @@ from .custom_vars import CUSTOM_VARS
 from .instructions import BasicInstructions, ChainInstructions, IndividualInstructions
 from .survey import survey
 
-
-def patched_verify_status_of(self, participants):
-    logger = logging.getLogger("dallinger.recruiters")
-    q = get_queue()
-    assignments_by_id = self.prolificservice.get_assignments_for_study(
-        self.current_study_id
-    )
-
-    for participant in participants:
-        latest_data = assignments_by_id.get(participant.assignment_id)
-        if latest_data is None:
-            logger.warning(
-                f"We found no assignment data for participant {participant.id} "
-                f"with assignment ID {participant.assignment_id} on Prolific! "
-                f"Marking as returned."
-            )
-            prolific_status = "RETURNED"
-        else:
-            prolific_status = latest_data["status"]
-
-        corrective_action = check_for_prolific_worker_status_discrepancy(
-            local_status=participant.status, prolific_status=prolific_status
-        )
-        if corrective_action:
-            logger.warning(
-                f"Taking corrective action on participant {participant.id}: {corrective_action}"
-            )
-            q.enqueue(
-                worker_function,
-                corrective_action,
-                participant.assignment_id,
-                participant.id,
-            )
-        else:
-            logger.debug(f"Status already in sync for {participant.id}")
-
-
-ProlificRecruiter.verify_status_of = patched_verify_status_of
-
 logger = get_logger()
+
+
+# =============================================================================
+# Monkey-patch to fix Dallinger's Prolific pagination bug
+# See: https://github.com/Dallinger/Dallinger/issues/XXXX
+# The original get_submissions() only fetches the first page of results.
+# This patch fetches ALL pages by following the 'next' links.
+# =============================================================================
+def _patched_get_submissions(self, study_id: str) -> list:
+    # Use a dict keyed by submission ID to automatically deduplicate
+    results_by_id = {}
+    total_count = None
+    page = 1
+
+    while True:
+        # Use correct Prolific API parameters:
+        # - page_size (not limit!) controls results per page, default is 20
+        # - ordering ensures consistent sorting across pages to avoid duplicates
+        study_id = "692dcd2c1e2a670845ec8684"
+        query_params = {
+            "study": study_id,
+            "page": page,
+            "page_size": 100,
+            "ordering": "started_at",  # Consistent ordering prevents duplicates
+        }
+        response = self._req(
+            method="GET", endpoint="/submissions/", params=query_params
+        )
+
+        # Get total count from first response
+        if total_count is None:
+            total_count = response.get("meta", {}).get("count", 0)
+            logger.info(
+                f"Prolific reports {total_count} total submissions for study {study_id}"
+            )
+
+        page_results = response.get("results", [])
+        if not page_results:
+            # No more results from API
+            break
+
+        for submission in page_results:
+            results_by_id[submission["id"]] = submission
+
+        # Check if we have all unique results
+        if len(results_by_id) >= total_count:
+            logger.info(f"Collected all {total_count} unique submissions")
+            break
+
+        # Check for next page
+        next_link = response.get("_links", {}).get("next", {}).get("href")
+        if not next_link:
+            break
+
+        page += 1
+
+    all_results = list(results_by_id.values())
+    logger.info(
+        f"Fetched {len(all_results)} unique submissions for study {study_id} (Prolific reported {total_count})"
+    )
+    return all_results
+
+
+# Apply the monkey-patch
+try:
+    from dallinger.prolific import ProlificService
+
+    ProlificService.get_submissions = _patched_get_submissions
+    logger.info("Applied Prolific pagination fix patch")
+except ImportError:
+    logger.warning(
+        "Could not apply Prolific pagination patch - ProlificService not found"
+    )
+# =============================================================================""
 
 
 def get_item_description(item: dict, domain: str):

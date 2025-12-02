@@ -56,7 +56,6 @@ def _patched_get_submissions(self, study_id: str) -> list:
         # Use correct Prolific API parameters:
         # - page_size (not limit!) controls results per page, default is 20
         # - ordering ensures consistent sorting across pages to avoid duplicates
-        study_id = "692dcd2c1e2a670845ec8684"
         query_params = {
             "study": study_id,
             "page": page,

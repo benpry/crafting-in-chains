@@ -49,53 +49,57 @@ logger = get_logger()
 def _patched_get_submissions(self, study_id: str) -> list:
     # Use a dict keyed by submission ID to automatically deduplicate
     results_by_id = {}
-    total_count = None
-    page = 1
+    prev_study_id = "692dcd2c1e2a670845ec8684"
 
-    while True:
-        # Use correct Prolific API parameters:
-        # - page_size (not limit!) controls results per page, default is 20
-        # - ordering ensures consistent sorting across pages to avoid duplicates
-        query_params = {
-            "study": study_id,
-            "page": page,
-            "page_size": 100,
-            "ordering": "started_at",  # Consistent ordering prevents duplicates
-        }
-        response = self._req(
-            method="GET", endpoint="/submissions/", params=query_params
-        )
+    for s_id in [prev_study_id, study_id]:
+        page = 1
+        total_count = None
 
-        # Get total count from first response
-        if total_count is None:
-            total_count = response.get("meta", {}).get("count", 0)
-            logger.info(
-                f"Prolific reports {total_count} total submissions for study {study_id}"
+        if s_id is None:
+            print("current study id is None, continuing...")
+            continue
+
+        while True:
+            query_params = {
+                "study": s_id,
+                "page": page,
+                "page_size": 100,
+                "ordering": "started_at",  # Consistent ordering prevents duplicates
+            }
+            response = self._req(
+                method="GET", endpoint="/submissions/", params=query_params
             )
 
-        page_results = response.get("results", [])
-        if not page_results:
-            # No more results from API
-            break
+            # Get total count from first response
+            if total_count is None:
+                total_count = response.get("meta", {}).get("count", 0)
+                logger.info(
+                    f"Prolific reports {total_count} total submissions for study {s_id}"
+                )
 
-        for submission in page_results:
-            results_by_id[submission["id"]] = submission
+            page_results = response.get("results", [])
+            if not page_results:
+                # No more results from API
+                break
 
-        # Check if we have all unique results
-        if len(results_by_id) >= total_count:
-            logger.info(f"Collected all {total_count} unique submissions")
-            break
+            for submission in page_results:
+                results_by_id[submission["id"]] = submission
 
-        # Check for next page
-        next_link = response.get("_links", {}).get("next", {}).get("href")
-        if not next_link:
-            break
+            # Check if we have all unique results
+            if len(results_by_id) >= total_count:
+                logger.info(f"Collected all {total_count} unique submissions")
+                break
 
-        page += 1
+            # Check for next page
+            next_link = response.get("_links", {}).get("next", {}).get("href")
+            if not next_link:
+                break
+
+            page += 1
 
     all_results = list(results_by_id.values())
     logger.info(
-        f"Fetched {len(all_results)} unique submissions for study {study_id} (Prolific reported {total_count})"
+        f"Fetched {len(all_results)} unique submissions for studies {study_id} and {prev_study_id} (Prolific reported {total_count})"
     )
     return all_results
 
@@ -105,7 +109,6 @@ try:
     from dallinger.prolific import ProlificService
 
     ProlificService.get_submissions = _patched_get_submissions
-    logger.info("Applied Prolific pagination fix patch")
 except ImportError:
     logger.warning(
         "Could not apply Prolific pagination patch - ProlificService not found"
